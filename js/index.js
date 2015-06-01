@@ -52,6 +52,18 @@ var app = {
 		app.destinationType = navigator.camera.DestinationType;
 		app.encodingType = navigator.camera.EncodingType;
 		$('#mainContainer').css({'height':$('#mainContainer').css('min-height')+' !important'});
+		//$('input[type="text"], textarea').click(function(){$(this).focus();});
+		window.addEventListener('native.keyboardshow', function (e){
+			app.container.css({'margin-bottom':e.keyboardHeight}).trigger('refresh');
+			//$("html, body").animate({ scrollTop: '+=' + e.keyboardHeight + 'px' }, 600);
+			//alert($('#mainContainer').css({'padding-bottom'}));
+		    //alert('Keyboard height is: ' + e.keyboardHeight);
+		});
+		window.addEventListener('native.keyboardhide', function (e){
+			app.container.css({'margin-bottom':'0px'}).trigger('refresh');
+			//alert($('#mainContainer').css({'margin-bottom'}));
+		    //console.log('Goodnight, sweet prince');
+		});
 		//$('#header').css({'height':$(window).height()*0.12+'px !important'});
 		//$('.appPage').css({'padding-top':parseInt($(window).height()*0.12)+'px !important'});
 		//$('.appPage .ui-content').css({'padding-top':parseInt($(window).height()*0.02)+'px !important'});
@@ -1245,7 +1257,6 @@ var app = {
 			alert('יש למלא שדה מה אני מחפש');
 			return false;
 		}
-		alert()
 		/*if($('#userPhone').val().length == 0){
 			alert('טלפון שגויה');
 			return false;
