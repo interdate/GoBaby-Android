@@ -1175,18 +1175,18 @@ var app = {
 	},
 	
 	formIsValid: function(){
-		if($('#userAboutMe').val().length != 0){
-			app.wordFields('userAboutMe',$('#userAboutMe').val());
-		}
+		//if($('#userAboutMe').val().length != 0){
+			//app.wordFields('userAboutMe',$('#userAboutMe').val());
+		//}
 		var email_pattern = new RegExp(/^[+a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/i);		
-		if (!(email_pattern.test($('#userEmail').val()))) {
+		if (!(email_pattern.test($('#regForm #userEmail').val()))) {
 			alert('דוא"ל שגוי');
-			$('#userEmail').focus();
+			$('#regForm #userEmail').focus();
 			return false;
 		}
 		if($('#register_page .userEmailState .userFailed').css('display') == 'block'){
 			alert("כתובת הדואר האלקטרוני שהזנת אינה תקינה");
-			$('#userEmail').focus();
+			$('#regForm #userEmail').focus();
 			return false;
 		}		
 		/*if ($('#userEmail').val() != $('#userEmail2').val()) {
@@ -1194,27 +1194,27 @@ var app = {
 			$('#userEmail2').focus();
 			return false;
 		}*/
-		if ($('#userPass').val().length < 4 || $('#userPass').val().length > 12) {
+		if ($('#regForm #userPass').val().length < 4 || $('#regForm #userPass').val().length > 12) {
 			alert("סיסמה שגויה (אמור להיות 4-12 סימנים)");
-			$('#userPass').focus();
+			$('#regForm #userPass').focus();
 			return false;
 		}
-		if ($('#userPass').val() != $('#userPass2').val()) {
+		if ($('#regForm #userPass').val() != $('#regForm #userPass2').val()) {
 			alert("טעות בסיסמה שנית");
-			$('#userPass2').focus();
+			$('#regForm #userPass2').focus();
 			return false;
 		}
-		if ($('#userNick').val().length == 0) {
+		if ($('#regForm #userNick').val().length == 0) {
 			alert("יש למלא שדה כינוי");
-			$('#userNick').focus();
+			$('#regForm #userNick').focus();
 			return false;
 		}
 		if($('#register_page .userNickState .userFailed').css('display') == 'block'){
 			alert('שם המשתמש שבחרתם קיים במערכת. אנא בחרו שם חדש.');
-			$('#userNick').focus();
+			$('#regForm #userNick').focus();
 			return false;
 		}
-		if($('#d').val().length == 0 || $('#m').val().length == 0 || $('#y').val().length == 0){
+		if($('#regForm #d').val().length == 0 || $('#regForm #m').val().length == 0 || $('#regForm #y').val().length == 0){
 			alert('יש למלא שדה תאריך לידה');
 			return false;
 		}
@@ -1229,18 +1229,23 @@ var app = {
 			alert('העדפה שגויה');
 			return false;
 		}*/
-		if($('#sexPrefId').val().length == 0){
+		if($('#regForm #sexPrefId').val().length == 0){
 			alert('יש למלא שדה העדפה');
 			return false;
 		}
-		if($('#userCity').val().length == 0){
+		if($('#regForm #userCity').val().length == 0){
 			alert('יש למלא שדה עיר');
 			return false;
 		}
-		if($('#userAboutMe').val().length == 0){
+		if($('#regForm #userAboutMe').val().length < 10){
 			alert('יש למלא שדה על עצמי');
 			return false;
 		}
+		if($('#regForm #userLookingFor').val().length < 10){
+			alert('יש למלא שדה מה אני מחפש');
+			return false;
+		}
+		alert()
 		/*if($('#userPhone').val().length == 0){
 			alert('טלפון שגויה');
 			return false;
@@ -1797,7 +1802,7 @@ var app = {
 	getBithDate: function(){
 		var html;
 		var curYear = new Date().getFullYear();		
-		html = '<div style="max-width:30%;float: right;">';
+		html = '<div style="max-width:45%;float: right;">';
 			html = html + '<select name="userBirthday_y" id="y">';
 				html = html + '<option value="">Y</option>';
 				for (var i = curYear - 18; i >=1940 ; i--) {

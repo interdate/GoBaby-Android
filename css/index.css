@@ -1683,6 +1683,7 @@ fieldset input{opacity:0;}
 #search_form_page .ui-btn-icon-left  .ui-btn-inner,#register_page .ui-btn-icon-left  .ui-btn-inner,#edit_profile_page .ui-btn-icon-left  .ui-btn-inner{padding-left: 1.7em;padding-right:0.4em;}
 #search_form_page .ui-btn-icon-left  .ui-btn-inner:after,#register_page .ui-btn-icon-left  .ui-btn-inner:after,#edit_profile_page .ui-btn-icon-left  .ui-btn-inner:after{left: .3em;}
 #search_form_page .ui-btn-icon-left .ui-icon,#register_page .ui-btn-icon-left .ui-icon,#edit_profile_page .ui-btn-icon-left .ui-icon{left:4px;}
+.ui-select .ui-btn-text{text-overflow: initial;overflow:visible!important}
 #bannerLink .ui-btn,#bannerLink1 .ui-btn{border-radius:10px;height:60px;line-height:40px;}
 #uploadDiv .ui-btn{margin-bottom:15px;}
 #upload_image_page .ui-btn{margin-top:20px;}
@@ -1837,6 +1838,9 @@ margin-bottom:10%;
     color: #a02106;
 }
 
+.textar{
+	line-height:1;
+}
 
 
 
