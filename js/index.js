@@ -3,12 +3,15 @@ pagesTracker = [];
 pagesTracker.push('main_page');
 var pushNotification;
 
-
+getUsersRequest = '';
+checkNewMessagesRequest = '';
+newMessages = '';
 
 
 
 var app = { 
-	
+
+	apiUrl : 'http://m.gobaby.co.il',
 	pictureSource : '',
 	destinationType : '',
 	encodingType : '',	
@@ -29,6 +32,7 @@ var app = {
 	statAction : '',
 	searchFuncsMainCall: '',
 	sort: '',
+	reportAbuseUserId : '',
 	
 	
 	profileGroupTemplate : '',
@@ -41,9 +45,13 @@ var app = {
 	positionSaved : false,
 	logged: false,
 	exit: false,
+	newMessagesCount : 0,
+    contactCurrentReadMessagesNumber : 0,
 	
 		
 	init: function(){
+
+
 		//navigator.splashscreen.hide();	
 		//navigator.splashscreen.show();
 		app.ajaxSetup();		
@@ -89,7 +97,7 @@ var app = {
 			},		
 			statusCode:{
 				
-				401: function(response, textStatus, xhr){
+				403: function(response, textStatus, xhr){
 					
 					app.stopLoading();
 					app.showPage('login_page');
@@ -97,12 +105,7 @@ var app = {
 					//app.printUsers();
 					
 					if(app.exit===false){
-						navigator.notification.alert(
-							'הכנסת מידע שגוי, אנא נסה שנית',
-							//response.status + ':' + textStatus,	
-							'Notification',
-							'Notification'
-						);
+						app.alert('הכנסת מידע שגוי, אנא נסה שנית');
 					}
 					 
 				}
@@ -111,7 +114,7 @@ var app = {
 			
 			error: function(response, textStatus, errorThrown){
 				app.stopLoading();				
-				//alert(response.status + ':' + errorThrown );
+				console.log(JSON.stringify(response));
 			},
 			
 			complete: function(response, status, jqXHR){
@@ -120,16 +123,40 @@ var app = {
 			},
 		});		
 	},
-	
+
+	alert: function(message){
+    	navigator.notification.alert(
+    		message,
+    		function(){},
+    		'Notification',
+    		'Ok'
+    	);
+    },
+
 	logout:function(){
-		
+
+		$(window).unbind('scroll');
+		clearTimeout(newMessages);
 		app.startLoading();
-		clearTimeout(newMesssages);		
+
 		pagesTracker = [];
 		pagesTracker.push('login_page');
 		app.exit = true;
+
+
+		if(checkNewMessagesRequest != ''){
+			checkNewMessagesRequest.abort();
+			console.log("Abort checkNewMessagesRequest");
+		}
+
+		if(getUsersRequest != ''){
+			getUsersRequest.abort();
+			console.log("Abort getUsersRequest");
+		}
+
+
 		$.ajax({				
-			url: 'http://m.gobaby.co.il/api/v1/user/logout',			
+			url: app.apiUrl + '/api/v4/user/logout',			
 			success: function(data, status){	
 				//alert(JSON.stringify(data));
 				if(data.logout == 1){					
@@ -199,15 +226,15 @@ var app = {
 	chooseMainPage: function(){
 		
 		pagesTracker = [];
-		pagesTracker.push('main_page');	 	
-	
+		pagesTracker.push('main_page');
+
 		$.ajax({ 
-			url: 'http://m.gobaby.co.il/api/v1/user/login',
+			url: app.apiUrl + '/api/v4/user/login',
 			error: function(response){				
 				//alert(JSON.stringify(response));
 			},
 			statusCode:{
-				401: function(response, status, xhr){
+				403: function(response, status, xhr){
 					app.logged = false;
 					app.UIHandler();
 				}
@@ -227,7 +254,7 @@ var app = {
 	
 	setBannerDestination: function(){
 		$.ajax({				
-			url: 'http://m.gobaby.co.il/api/v1/user/banners',			
+			url: app.apiUrl + '/api/v4/user/banners',			
 			success: function(response, status){
 				app.response = response;
 				//alert(JSON.stringify(app.response));
@@ -271,7 +298,7 @@ var app = {
 		window.localStorage.setItem("pass",pass);	
 		
 		$.ajax({				
-			url: 'http://m.gobaby.co.il/api/v1/user/login',			
+			url: app.apiUrl + '/api/v4/user/login',			
 			beforeSend: function(xhr){
 				user = window.localStorage.getItem("user");
 				pass = window.localStorage.getItem("pass");	
@@ -291,23 +318,28 @@ var app = {
 		});
 	},
 	
-	sendUserPosition: function(){		
-		if(app.positionSaved === false){			
-			navigator.geolocation.getCurrentPosition(app.persistUserPosition, app.userPositionError);
-		}
+	sendUserPosition: function(){
+		//if(app.positionSaved === false){
+			navigator.geolocation.getCurrentPosition(app.persistUserPosition, app.userPositionError, {
+				enableHighAccuracy: true,
+				//timeout:50000,
+                //maximumAge: 300000
+            });
+		//}
 	},
 	
 	persistUserPosition: function(position){		
+
 		var data = {
 			longitude: position.coords.longitude,
 			latitude: position.coords.latitude
 		};
 			
-		//alert(JSON.stringify(data));
+		console.log(JSON.stringify(data));
 		//return;
 		
 		$.ajax({
-			url: 'http://m.gobaby.co.il/api/v1/user/location',
+			url: app.apiUrl + '/api/v4/user/location',
 			type: 'Post',
 			data:JSON.stringify(data),
 			success: function(response){
@@ -318,13 +350,14 @@ var app = {
 	},
 	
 	userPositionError: function(error){
-		alert('code: '    + error.code    + '\n' +
+		console.log("PERSIST ERROR");
+		console.log('code: '    + error.code    + '\n' +
 	          'message: ' + error.message + '\n');		
 	},
 	
 	printUsers: function(){
 		$.ajax({
-			url: 'http://m.gobaby.co.il/api/v1/users/recently_visited/2',
+			url: app.apiUrl + '/api/v4/users/recently_visited/2',
 			success: function(data, status){
 				for ( var i = 0; i < data.users.length; i++) {
 					$("#udp_"+i).find(".user_photo_wrap .user_photo").attr("src",data.users[i].mainImage);
@@ -428,7 +461,7 @@ var app = {
     
     persistGcmDeviceId: function(){
     	$.ajax({				
-			url: 'http://m.gobaby.co.il/api/v1/user/gcmDeviceId',
+			url: app.apiUrl + '/api/v4/user/gcmDeviceId',
 			type: 'Post',
 			data: JSON.stringify({			
 				gcmDeviceId: app.gcmDeviceId 
@@ -475,9 +508,19 @@ var app = {
 		if(app.currentPageId == 'users_list_page'){
 			app.template = $('#userDataTemplate').html();
 			window.scrollTo(0, app.recentScrollPos);
-			app.setScrollEventHandler();
+			app.setScrollEventHandler(2500,3500);
 		}
-		app.searchFuncsMainCall = true;
+		else if(app.currentPageId == 'messenger_page'){
+			app.template = $('#messengerTemplate').html();
+			console.log(app.recentScrollPos);
+			window.scrollTo(0, app.recentScrollPos);
+			app.setScrollEventHandler(1000,2000);
+		}
+		else{
+			var usersListPage = pagesTracker[pagesTracker.length-2];
+			if(usersListPage != 'users_list_page')
+			app.searchFuncsMainCall = true;
+		}
 		app.stopLoading();
 	},
 	
@@ -561,13 +604,17 @@ var app = {
 		app.container.append('<h1>תוצאות</h1><div class="dots"></div>');
 		app.action = 'getOnlineNow';
 		app.pageNumber = 1;
+		app.itemsPerPage = 15;
 		app.getUsers();
 	},
 	
  
 	getUsers: function(){
-		app.startLoading();
-		//alert(555);
+
+
+		if(app.pageNumber == 1){
+        	app.startLoading();
+        }
 		
 		if(app.searchFuncsMainCall === true && app.positionSaved === true){
 			$('#sortByEntranceTime').hide();			
@@ -576,7 +623,7 @@ var app = {
 		}
 		//alert(app.sort);
 		if(app.action == 'getOnlineNow'){					
-			app.requestUrl = 'http://m.gobaby.co.il/api/v1/users/online/count:'+app.itemsPerPage+'/page:'+app.pageNumber+'/sort:'+app.sort;
+			app.requestUrl = app.apiUrl + '/api/v4/users/online/count:'+app.itemsPerPage+'/page:'+app.pageNumber+'/sort:'+app.sort;
 			//alert(app.requestUrl);
 		}	
 		else if(app.action == 'getSearchResults'){
@@ -592,13 +639,13 @@ var app = {
 				sexPref+=$(this).val();
 			});			
 			
-			app.requestUrl = 'http://m.gobaby.co.il/api/v1/users/search/region:'+region+'/age:'+ageFrom+'-'+ageTo+'/userGender:'+userGender+'/nickName:'+nickName+'/count:'+app.itemsPerPage+'/page:'+app.pageNumber+'/sexPreference:'+sexPref+'/sort:'+app.sort;;
+			app.requestUrl = app.apiUrl + '/api/v4/users/search/region:'+region+'/age:'+ageFrom+'-'+ageTo+'/userGender:'+userGender+'/nickName:'+nickName+'/count:'+app.itemsPerPage+'/page:'+app.pageNumber+'/sexPreference:'+sexPref+'/sort:'+app.sort;;
 		}	
 		else if(app.action == 'getStatResults'){					
-			app.requestUrl = 'http://m.gobaby.co.il/api/v1/user/statistics/'+app.statAction+'/count:'+app.itemsPerPage+'/page:'+app.pageNumber+'/sort:'+app.sort;
+			app.requestUrl = app.apiUrl + '/api/v4/user/statistics/'+app.statAction+'/count:'+app.itemsPerPage+'/page:'+app.pageNumber+'/sort:'+app.sort;
 		}
 		
-		$.ajax({						
+		getUsersRequest = $.ajax({
 			url: app.requestUrl,
 			timeout:10000,
 			success: function(response, status){
@@ -623,57 +670,125 @@ var app = {
 	displayUsers: function(){
 		//app.container.parent('div').append('<h1>תוצאות</h1>');
 		//var replaceDblQuete = new RegExp("#34;",'g');
-		for(var i in app.response.users.items){
-			var currentTemplate = app.template; 
-			var user = app.response.users.items[i];
-			//alert( user.city );			
-			currentTemplate = currentTemplate.replace("[USERNICK]",user.nickName);
-			currentTemplate = currentTemplate.replace("[AGE]",user.age);
-			//currentTemplate = currentTemplate.replace("[COUNTRY]",user.country+',');
-			currentTemplate = currentTemplate.replace("[CITY]",user.city);
-			currentTemplate = currentTemplate.replace("[IMAGE]",user.mainImage);			
-			currentTemplate = currentTemplate.replace(/\[USERNICK\]/g,user.nickName);										
-			currentTemplate = currentTemplate.replace("[USER_ID]", user.id);	
-			//var aboutUser = '';
-			//if(typeof(user.about) === 'string'){   
-			//	if(user.about.length > 90){
-			//		aboutUser = user.about.substring(0,90)+'...';
-			//	}
-			//	else{
-			//		aboutUser = user.about;
-			//	}
-			//}					
-			currentTemplate = currentTemplate.replace("[ABOUT]", user.about);			
-			//app.container.append(currentTemplate.replace(replaceDblQuete,"''"));
-			app.container.append(currentTemplate);
-			var currentUserNode = app.container.find(".user_data:last-child");			
-			currentUserNode.find(".user_short_txt").attr("onclick","app.getUserProfile("+user.id+");");
-			currentUserNode.find(".user_photo_wrap").attr("onclick","app.getUserProfile("+user.id+");");
-			if(user.isNew == 1){						
-				currentUserNode.find(".blue_star").show();
-			}					
-			if(user.isPaying == 1){						
-				currentUserNode.find(".special3").show();
+
+		if(app.currentPageId == 'users_list_page'){
+
+   			$('.loadingHTML').remove();
+
+   			var userId = window.localStorage.getItem("userId");
+
+   			console.log(app.response.users.itemsNumber);
+
+
+  			if(app.response.users.itemsNumber == 0){
+   				app.container.append('<div class="center noResults">אין תוצאות</div>')
+  				return;
+  			}
+
+
+
+			for(var i in app.response.users.items){
+				var currentTemplate = app.template;
+				var user = app.response.users.items[i];
+				//alert( user.city );
+				currentTemplate = currentTemplate.replace("[USERNICK]",user.nickName);
+				currentTemplate = currentTemplate.replace("[AGE]",user.age);
+				//currentTemplate = currentTemplate.replace("[COUNTRY]",user.country+',');
+				currentTemplate = currentTemplate.replace("[CITY]",user.city);
+				currentTemplate = currentTemplate.replace("[IMAGE]",user.mainImage.url);
+				currentTemplate = currentTemplate.replace(/\[USERNICK\]/g,user.nickName);
+				currentTemplate = currentTemplate.replace("[USER_ID]", user.id);
+				//var aboutUser = '';
+				//if(typeof(user.about) === 'string'){
+				//	if(user.about.length > 90){
+				//		aboutUser = user.about.substring(0,90)+'...';
+				//	}
+				//	else{
+				//		aboutUser = user.about;
+				//	}
+				//}
+
+
+
+				if(user.about == null || user.about.indexOf(" ") > 20)
+                	user.about='';
+
+
+                if(user.about == null)
+                	user.about='';
+
+				currentTemplate = currentTemplate.replace("[ABOUT]", user.about);
+				//app.container.append(currentTemplate.replace(replaceDblQuete,"''"));
+				app.container.append(currentTemplate);
+				var currentUserNode = app.container.find(".user_data:last-child");
+				currentUserNode.find(".user_short_txt").attr("onclick","app.getUserProfile("+user.id+");");
+				currentUserNode.find(".user_photo_wrap").attr("onclick","app.getUserProfile("+user.id+");");
+				if(user.isNew == 1){
+					currentUserNode.find(".blue_star").show();
+				}
+				if(user.isPaying == 1){
+					currentUserNode.find(".special3").show();
+				}
+				if(user.isOnline == 1){
+					currentUserNode.find(".on2").show();
+				}else{
+					currentUserNode.find(".on").show();
+				}
+				if(user.id==window.localStorage.getItem("userId")){
+					currentUserNode.find('.send_mes').hide();
+				}
+				if(user.distance != ""){
+					currentUserNode.find(".distance_value").show().find("span").html(user.distance);
+				}
 			}
-			if(user.isOnline == 1){						
-				currentUserNode.find(".on2").show();				
-			}else{
-				currentUserNode.find(".on").show();
+			//setTimeout(app.stopLoading(), 10000);
+			//app.stopLoading();
+			app.responseItemsNumber = app.response.users.itemsNumber;
+			if(app.responseItemsNumber == app.itemsPerPage){
+				var loadingHTML = '<div class="loadingHTML">'+$('#loadingBarTemplate').html()+'</div>';
+				$(loadingHTML).insertAfter(currentUserNode);
 			}
-			if(user.id==window.localStorage.getItem("userId")){
-				currentUserNode.find('.send_mes').hide();
-			}
-			if(user.distance != ""){						
-				currentUserNode.find(".distance_value").show().find("span").html(user.distance);
-			}			
-		}
-		//setTimeout(app.stopLoading(), 10000);
-		//app.stopLoading();
-		app.responseItemsNumber = app.response.users.itemsNumber;
-		app.setScrollEventHandler();
-	},	
+
+			app.setScrollEventHandler(2500,3500);
+
+       }
+       else{
+       		app.pageNumber--;
+       }
+	},
+
+	setScrollEventHandler: function(min1, min2){
+		$(window).scroll(function(){
+    		 //var min=2500;
+
+    		 min = min1;
+    		 if($(this).width()>767) min = min2;
+
+    		 app.recentScrollPos = $(this).scrollTop();
+    		 console.log('setScrollEventHandler:' + app.recentScrollPos);
+    		 console.log(app.recentScrollPos + ':' + app.container.height());
+    		 //alert(app.recentScrollPos + ' > ' + app.container.height() +' - ' +min);
+
+    		 if(app.recentScrollPos >= app.container.height()-min){
+    			 $(this).unbind("scroll");
+
+    			 if(app.responseItemsNumber == app.itemsPerPage){
+
+    				 app.pageNumber++;
+
+    				 if(app.currentPageId == 'messenger_page'){
+    					 app.getMessenger();
+    				 }
+    				 else{
+    						app.getUsers();
+    				 }
+    			 }
+    		 }
+
+		});
+	},
 	
-		
+	/*
 	setScrollEventHandler: function(){
 		$(window).scroll(function(){
 			var min=600;
@@ -688,6 +803,7 @@ var app = {
 			}
 		});
 	},
+	*/
 	
 	getMyProfileData: function(){		
 		app.startLoading();
@@ -708,7 +824,7 @@ var app = {
 		});	
 		var userId = window.localStorage.getItem("userId");		
 		$.ajax({
-			url: 'http://m.gobaby.co.il/api/v1/user/profile/'+userId,						
+			url: app.apiUrl + '/api/v4/user/profile/'+userId,						
 			success: function(user, status, xhr){
 				var replaceDblQuete = new RegExp("#34;",'g');
 				//alert( JSON.stringify(user));
@@ -719,8 +835,8 @@ var app = {
 				app.container = app.currentPageWrapper.find('.myProfileWrap');		
 				app.container.find('.txt strong').html(user.nickName+', <span>'+user.age+'</span>');			
 				app.container.find('.txt strong').siblings('span').text(user.city); 
-				app.container.find('.txt').append(user.about);			
-				app.container.find('.user_pic img').attr("src",user.mainImage);		
+				app.container.find('.txt div').html(user.about);
+				app.container.find('.user_pic img').attr("src",user.mainImage.url);
 				if(user.isPaying==1){
 					app.container.find(".special4").show();
 				}				
@@ -765,11 +881,11 @@ var app = {
 		var mail = app.currentPageWrapper.find('#user').val();
 		var email_pattern = new RegExp(/^[+a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/i);
         if (!(email_pattern.test(mail))) {
-            alert('נא להזין את כתובת דוא"ל חוקית');
+            alert('נא להזין כתובת דוא"ל חוקית');
             return false;
         }
         $.ajax({
-        	url: 'http://m.gobaby.co.il/api/v1/recovery/'+mail,
+        	url: app.apiUrl + '/api/v4/recovery/'+mail,
         	success: function(response){
         		//alert(JSON.stringify(response));
         		if(!response.err)
@@ -783,173 +899,227 @@ var app = {
 			}
         });
 	},
-	
-	getEditProfile: function(){			
+	getEditProfile: function(){
+
 		$.ajax({
-			url: 'http://m.gobaby.co.il/api/v1/getedit',
-			success: function(response){
-				//alert(JSON.stringify(response));				
-				app.response = response.user;
-				app.showPage('edit_profile_page');
-				app.container = app.currentPageWrapper.find('.edit_wrap');
-				app.container.html('');
-				app.template = $('#editProfileTemplate').html();
-				app.template = app.template.replace(/\[userNick\]/g,response.user.userNick);
-				app.template = app.template.replace(/\[userPass\]/g,response.user.userPass);
-				app.template = app.template.replace(/\[userEmail\]/g,response.user.userEmail);
-				app.template = app.template.replace(/\[userCity\]/g,response.user.userCity);
-				if(response.user.userAboutMe==null)response.user.userAboutMe='';
-				if(response.user.userLookingFor==null)response.user.userLookingFor='';
-				app.template = app.template.replace(/\[userAboutMe\]/g,response.user.userAboutMe);
-				app.template = app.template.replace(/\[userLookingFor\]/g,response.user.userLookingFor);
-				app.template = app.template.replace(/\[userPhone\]/g,response.user.userPhone);
-				app.template = app.template.replace(/\[Y\]/g,response.user.Y);
-				app.template = app.template.replace(/\[n\]/g,response.user.n);
-				app.template = app.template.replace(/\[j\]/g,response.user.j);
-				if(response.user.userGender=='1')
-					app.template = app.template.replace(/\[userGenderName\]/g,'גבר');
-				else
-					app.template = app.template.replace(/\[userGenderName\]/g,'אישה');
-				app.container.html(app.template).trigger('create');
-				app.getRegions();
-					
-				//var regionName = '';
-				//app.container.find('#countryRegionId').val(response.user.countryRegionId).attr('name','countryRegionId');
-				
-				//alert(regionName);
-				//app.container.find('#countryRegionId').parents('.save').next('.edit').find('div').text(response.user.region);
-				//app.getReligions();		
-				$('#userBirth').html(app.getBithDate()).trigger('create');
-				app.container.find('.userGender').html(app.getuserGender()).trigger('create');	
-				$('body').trigger('refresh');
-			},
-			error: function(err){
-				//alert(JSON.stringify(err));
-			}
-		});
+		   url: 'http://m.gobaby.co.il/api/v4/user/data',
+		   error: function(response){
+		   console.log(JSON.stringify(response));
+		   },
+		   success: function(response){
+		   user = response.user;
+		   //alert(JSON.stringify(response));
+		   app.showPage('edit_profile_page');
+		   app.container = app.currentPageWrapper.find('.edit_wrap');
+		   app.container.html('');
+		   app.template = $('#userEditProfileTemplate').html();
+		   app.template = app.template.replace(/\[userNick\]/g,user.userNick);
+		   app.template = app.template.replace(/\[userPass\]/g,user.userPass);
+		   app.template = app.template.replace(/\[userEmail\]/g,user.userEmail);
+		   app.template = app.template.replace(/\[userCity\]/g,user.userCity);
+
+		   if(user.userAboutMe == null)
+					user.userAboutMe='';
+
+		   if(user.userLookingFor == null)
+					user.userLookingFor='';
+
+		   app.template = app.template.replace(/\[userAboutMe\]/g,user.userAboutMe);
+		   app.template = app.template.replace(/\[userLookingFor\]/g,user.userLookingFor);
+		   //app.template = app.template.replace(/\[userfName\]/g,user.userfName);
+		   //app.template = app.template.replace(/\[userlName\]/g,user.userlName);
+		   app.template = app.template.replace(/\[Y\]/g,user.Y);
+		   app.template = app.template.replace(/\[n\]/g,user.n);
+		   app.template = app.template.replace(/\[j\]/g,user.j);
+
+
+		   app.container.html(app.template).trigger('create');
+		   app.getRegions();
+		   $('#userBirth').html(app.getBithDate()).trigger('create');
+
+
+
+		   //app.container.find('.userGender').html(app.getuserGender()).trigger('create');
+		   },
+		   error: function(err){
+		   //alert(JSON.stringify(err));
+		   }
+		   });
 	},
-	
-	getuserGender: function(){
-    	var html = '<select name="userGender" data-iconpos="left" id="userGender">';
-    	html = html + '<option value="1"';
-    	if(app.response .userGender=='1')
-    		html = html + ' selected="selected" ';
-    	html = html + '>גבר</option>';
-    	html = html + '<option value="0"';
-    	if(app.response .userGender=='0')
-    		html = html + ' selected="selected" ';
-    	html = html + '>אישה</option></select>';
-    	return html;
-    },
-    
+
 	saveProf: function (el,tag){
-        var name = '';
-        var val = '';
-        var input = $(el).parent().find(tag);
-        if(input.size()=='3'){
-            var er=false;
-            input.each(function(index){
-                if(index!='0')val=val+'-';
-                val=val+$(this).val();
-                if($(this).val().length==0){
-                    alert('אנא תמאו ת. לידה');
-                    er=true;
-                }
-            });
-            if(er)return false;
-            name = 'userBirthday';
-        }else{
-            name = input.attr('name');
-            val = input.val();
-        }
-        //alert(name+'='+val);//return false;
-        if(name=='userPass'&&(val.length < 6||$('#userPass2').val()!==val)){
-            if(val.length < 6)
-                alert('סיסמה קצר מדי');                        
-            if($('#userPass2').val()!==val)
-                alert('מספר נתונים אינם תקנים: סיסמה או סיסמה שנית');
-            return false;
-        }        
-        if((val.length < 3&&tag!='select'&&name!='userGender')||(val.length==0&&(tag=='select'||name=='userGender'))){
-            alert($(el).parent().parent().prev().find('span').text()+' קצר מדי');
-            return false;
-        }
-        var email_pattern = new RegExp(/^[+a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/i);
-        if (!(email_pattern.test(val))&&name=='userEmail') {
-            alert("כתובת הדואר האלקטרוני שהזנת אינה תקינה");
-            return false;
-        }
-                
-        if($(el).parent().find('.userFailed').length > 0&&$(el).parent().find('.userFailed').is(":visible"))
-            return false;
-        app.startLoading();
-        $.ajax({
-			url: 'http://m.gobaby.co.il/api/v1/saveprofile',
-            //dataType: 'json',
-            type: 'post', 
-            data: JSON.stringify({name:name,val:val}),
-            contentType: "application/json; charset=utf-8",            
-            success : function(res){
-            	app.stopLoading();
-            	//alert(JSON.stringify(res));return false;
-                if(res.err == '1'){
-                   //check(input.attr('id'),val);                   
-                   alert(res.text);
-                   $(el).parent().find('.input').css({'background':'red'});
-                }else if(res.res == '1'){
-                	//alert(val);
-                	if(name == 'userNick' || name == 'userPass'){
-                		userValue = unescape(encodeURIComponent(val));
-                		if(name == 'userNick'){
-	                		window.localStorage.setItem("user",userValue);
-                		}
-                		if(name == 'userPass'){
-                			window.localStorage.setItem("pass",userValue);
-                		}
-                		app.ajaxSetup();
-                	}
-                    alert('עדכון נשמר');
-                    if(tag=='select'&&name!='userBirthday'&&name!='userGender'){
-                        val = $(el).parent().find('.ui-select span').eq(1).text();
-                        //alert(val);
-                    }
-                    if(val=='0'&&name=='userGender')val = 'אישה';
-                    if(val=='1'&&name=='userGender')val = 'גבר';
-                    if(name=='userBirthday') val=val.replace(/-/g,' / ');
-                    if(name=='userPass'){
-                        $(el).parent().next().find('input').val(val);
-                    }else if(tag=='textarea'){
-                    	input.val(res.text);
-                    	$(el).parent().next().find('div').text(res.text);
-                    }else{
-                        $(el).parent().next().find('div').text(val);
-                    }
-                    $('.save').hide();
-                    $('.edit').show();
-                }
-            },
-            error: function(err){
-            	app.stopLoading();
-            	//alert(JSON.stringify(err));
-            	$('.save').hide();
-                $('.edit').show();
-            }
-        });
-    },
-    
-    editProf: function (el){
-       var name = $(el).attr('name');       
-       if(name=='edit'){
-          $('.save').hide();
-          $('.edit').show();
-          //alert($('.sf_sel_wrap .edit').size());
-          $(el).parent().hide().prev().show();          
-       }else{
-          $(el).parent().hide().next('.edit').show();
-       }
-    },
-	
-	getSearchForm: function(){				
+		var name = '';
+		var val = '';
+		var input = $(el).parent().find(tag);
+		if(input.size()=='3'){
+			var er=false;
+			val = input.eq(2).val()+'-'+input.eq(1).val()+'-'+input.eq(0).val();
+			//console.log(val);
+			//return;
+			input.each(function(index){
+					   //if(index!='0')val=val+'-';
+					   //val=val+$(this).val();
+					   if($(this).val().length==0){
+					   alert('אנא תמאו ת. לידה');
+					   er=true;
+					   }
+					   });
+			if(er)return false;
+			name = 'userBirthday0';
+		}else{
+			name = input.attr('name');
+			val = input.val();
+		}
+		//alert(name+'='+val);//return false;
+		if(name == 'userPass'){
+			if(val.length < 4){
+				alert('סיסמה קצרה מדי');
+				return false;
+			}
+
+			if($('#editedUserPass2').val() !== val){
+				alert('מספר נתונים אינם תקינים: סיסמה או סיסמה שנית');
+				return false;
+			}
+
+		}
+		if((val.length < 3 && tag!='select') || (val.length==0 && tag=='select')){
+			alert($(el).parent().parent().prev().find('span').text()+' קצר מדי');
+			return false;
+		}
+		var email_pattern = new RegExp(/^[+a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/i);
+		if (!(email_pattern.test(val))&&name=='userEmail') {
+			alert("כתובת הדואר האלקטרוני שהזנת אינה תקינה");
+			return false;
+		}
+
+		if(name == 'userPass'){
+			if(val.length < 4){
+				alert('סיסמה קצרה מדי');
+				return false;
+			}
+
+			if($('#editedUserPass2').val() !== val){
+				alert('מספר נתונים אינם תקינים: סיסמה או סיסמה שנית');
+				return false;
+			}
+
+		}
+
+		if(name == 'userLookingFor'){
+			if(val.length < 10){
+				app.alert('מה אני מחפש/ת שגוי (אמור להיות 10 סימנים לפחות)');
+				return false;
+			}
+		}
+
+		if(name == 'userAboutMe'){
+			if(val.length < 10){
+				app.alert('על עצמי שגוי (אמור להיות 10 סימנים לפחות)');
+				return false;
+			}
+		}
+
+
+
+
+
+
+		if($(el).parent().find('.userFailed').length > 0 && $(el).parent().find('.userFailed').is(":visible")){
+			return false;
+		}
+
+
+
+		app.startLoading();
+		//alert(name+'='+val);
+
+		console.log("Abort checkNewMessagesRequest");
+		checkNewMessagesRequest.abort();
+		clearTimeout(newMessages);
+
+
+
+		$.ajax({
+			   url: 'http://m.gobaby.co.il/api/v4/user/data',
+			   //dataType: 'json',
+			   type: 'post',
+			   data: JSON.stringify({name:name,val:val}),
+			   contentType: "application/json; charset=utf-8",
+			   success : function(res){
+
+
+			   if(res.err != '1'){
+				   console.log(JSON.stringify(res));
+
+				   console.log("Abort checkNewMessagesRequest");
+				   checkNewMessagesRequest.abort();
+				   clearTimeout(newMessages);
+
+				   var user = app.container.find("#userNick").val();
+				   var pass = app.container.find("#editedUserPass").val();
+				   console.log("USERNAME: " + user);
+				   console.log("PASSWORD: " + pass);
+				   user = unescape(encodeURIComponent(user));
+				   pass = unescape(encodeURIComponent(pass));
+				   window.localStorage.setItem("user",user);
+				   window.localStorage.setItem("pass",pass);
+			   }
+
+			   //console.log("_________________________________________----------");
+
+
+			   app.ajaxSetup();
+			   app.checkNewMessages();
+
+			   app.stopLoading();
+			   //alert(JSON.stringify(res)); return false;
+
+			   if(res.err == '1'){
+			   //check(input.attr('id'),val);
+			   alert(res.text);
+			   $(el).parent().find('.input').css({'background':'red'});
+			   }else if(res.res == '1'){
+			   //alert(val);
+			   alert('עדכון נשמר');
+			   if(tag=='select'&&name!='userBirthday0'){
+			   val = $(el).parent().find('.ui-select span').eq(1).text();
+			   //alert(val);
+			   }
+			   //if(val=='0'&&name=='userGender')val = 'אישה';
+			   //if(val=='1'&&name=='userGender')val = 'גבר';
+
+			   if(name=='userBirthday0') val=val.replace(/-/g,' / ');
+			   if(name=='userPass')
+			   $(el).parent().next().find('input').val(val);
+			   else
+			   $(el).parent().next().find('div').text(val);
+			   $('.save').hide();
+			   $('.edit').show();
+			   }
+			   },
+			   error: function(err){
+			   app.stopLoading();
+			   alert(JSON.stringify(err));
+			   $('.save').hide();
+			   $('.edit').show();
+			   }
+			   });
+	},
+
+	editProf: function (el){
+		var name = $(el).attr('name');
+		if(name=='edit'){
+			$('.save').hide();
+			$('.edit').show();
+			//alert($('.sf_sel_wrap .edit').size());
+			$(el).parent().hide().prev().show();
+		}else{
+			$(el).parent().hide().next('.edit').show();
+		}
+	},
+
+	getSearchForm: function(){
 		app.startLoading();
 		app.showPage('search_form_page');
 		app.getRegions();
@@ -980,7 +1150,7 @@ var app = {
 		
 	getSexPreference: function(){
 		$.ajax({			
-			url: 'http://m.gobaby.co.il/api/v1/list/sexPref',						
+			url: app.apiUrl + '/api/v4/list/sexPref',						
 			success: function(list, status, xhr){							
 				var html = '';	
 				//alert( JSON.stringify(list));
@@ -1008,27 +1178,21 @@ var app = {
 		});
 	},
 	
-	injectCountries: function(html, container){
-		container.html(html);
-		container.trigger('create');
-		container.find("option[value='US']").insertBefore(container.find("option:eq(0)"));
-		container.find("option[value='CA']").insertBefore(container.find("option:eq(1)"));
-		container.find("option[value='AU']").insertBefore(container.find("option:eq(2)"));
-		container.find("option[value='GB']").insertBefore(container.find("option:eq(3)"));
-		container.val(container.find("option:first").val()).selectmenu("refresh");
-	},
-	
 	getRegions: function(){
 		$.ajax({
-			url: 'http://m.gobaby.co.il/api/v1/list/regions',						
+			url: app.apiUrl + '/api/v4/list/regions',						
 			success: function(list, status, xhr){							
 				var html = '<select name="regionCode" id="countryRegionId">';
 				if(app.currentPageId == 'edit_profile_page'){
 					html = '<select name="countryRegionId" data-iconpos="left" id="countryRegionId">';
 				}
+
 				if(app.currentPageId == 'search_form_page'){
-					html = html + '<option value="">לא חשוב</option>';
-				}				
+                    html = html + '<option value="">לא חשוב</option>';
+                }
+                else if(app.currentPageId == 'register_page'){
+                	html = html + '<option value="">בחרו</option>';
+                }
 				app.container.find(".regionsList").html('');
 				//app.container.find("#cities_wrap").hide();
 				//app.container.find(".citiesList").html('');
@@ -1065,7 +1229,7 @@ var app = {
 	/*
 	getCities: function(countryCode,regionCode){
 		$.ajax({
-			url: 'http://m.shedate.co.il/api/v1/list/cities/'+countryCode+'/'+regionCode,						
+			url: 'http://m.shedate.co.il/api/v4/list/cities/'+countryCode+'/'+regionCode,						
 			success: function(list, status, xhr){
 				app.container.find("#cities_wrap").hide();				
 				if(list.itemsNumber > 0){
@@ -1093,7 +1257,7 @@ var app = {
 	wordFields: function(id,val){
 		//alert(val);
 		$.ajax({
-			url:'http://m.gobaby.co.il/api/v1/wordFilters/',
+			url:app.apiUrl + '/api/v4/wordFilters/',
 			type:'Post',
 			contentType: "application/json; charset=utf-8",
 			data: JSON.stringify({			
@@ -1117,7 +1281,7 @@ var app = {
 	checkUserFields: function(name,val){
 		if(val.length>2){
 			$.ajax({
-				url:'http://m.gobaby.co.il/api/v1/chekUserFields/'+name+'='+val,
+				url: app.apiUrl + '/api/v4/chekUserFields/'+name+'='+val,
 				type:'Get',
 				success: function(response){					
 				   if(response){
@@ -1144,7 +1308,7 @@ var app = {
 				$('#regForm').serializeObject()
 			);
 			$.ajax({
-				url: 'http://m.gobaby.co.il/api/v1/user',
+				url: app.apiUrl + '/api/v4/user',
 				type: 'Post',
 				data: data,
 				success: function(response){
@@ -1161,12 +1325,7 @@ var app = {
 						app.getRegStep();
 					}
 					else{
-						navigator.notification.alert(
-							$('<div>'+app.response.err+'</div>').text(),								
-							//app.response.result,
-							'Notification',
-							'Notification'
-						);
+						app.alert(app.response.err);
 					}    
 				}
 			});
@@ -1191,60 +1350,153 @@ var app = {
 			//app.wordFields('userAboutMe',$('#userAboutMe').val());
 		//}
 		var email_pattern = new RegExp(/^[+a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/i);		
-		if (!(email_pattern.test($('#regForm #userEmail').val()))) {
+		if (!(email_pattern.test(app.container.find('#userEmail').val()))) {
 			alert('דוא"ל שגוי');
-			$('#regForm #userEmail').focus();
 			return false;
 		}
+
+		/*
 		if($('#register_page .userEmailState .userFailed').css('display') == 'block'){
 			alert("כתובת הדואר האלקטרוני שהזנת אינה תקינה");
 			$('#regForm #userEmail').focus();
 			return false;
-		}		
-		/*if ($('#userEmail').val() != $('#userEmail2').val()) {
-			alert("Error in retyped email");
-			$('#userEmail2').focus();
-			return false;
-		}*/
-		if ($('#regForm #userPass').val().length < 4 || $('#regForm #userPass').val().length > 12) {
-			alert("סיסמה שגויה (אמור להיות 4-12 סימנים)");
-			$('#regForm #userPass').focus();
+		}
+		*/
+
+
+		if (app.container.find('#userPass').val().length < 4 || app.container.find('#userPass').val().length > 12) {
+			app.alert("סיסמה שגויה (אמור להיות 4-12 סימנים)");
 			return false;
 		}
-		if ($('#regForm #userPass').val() != $('#regForm #userPass2').val()) {
-			alert("טעות בסיסמה שנית");
-			$('#regForm #userPass2').focus();
+
+		if (app.container.find('#userPass').val() != app.container.find('#userPass2').val()) {
+        	app.alert("טעות בסיסמה שנית");
+        	//$('#userPass2').focus();
+        	return false;
+        }
+
+        if (app.container.find('#userNick').val().length < 3) {
+        	app.alert('כינוי שגוי (אמור להיות 3 סימנים לפחות)');
+        	//$('#userNic').focus();
+        	return false;
+        }
+
+		if($('#d').val().length == 0 || $('#m').val().length == 0 || $('#y').val().length == 0){
+			app.alert('תאריך לידה שגוי');
 			return false;
 		}
-		if ($('#regForm #userNick').val().length == 0) {
-			alert("יש למלא שדה כינוי");
-			$('#regForm #userNick').focus();
-			return false;
-		}
-		if($('#register_page .userNickState .userFailed').css('display') == 'block'){
-			alert('שם המשתמש שבחרתם קיים במערכת. אנא בחרו שם חדש.');
-			$('#regForm #userNick').focus();
-			return false;
-		}
-		if($('#regForm #d').val().length == 0 || $('#regForm #m').val().length == 0 || $('#regForm #y').val().length == 0){
-			alert('יש למלא שדה תאריך לידה');
-			return false;
-		}
-		/*var checkSexPref = false;
-		$('.sex_preference_list fieldset input[name="sexPrefId"]').each(function(){
-			if($(this).is(':checked')){
-				checkSexPref = true;
-			}
-			//alert();
-		});
-		if(!checkSexPref){
-			alert('העדפה שגויה');
-			return false;
-		}*/
-		if($('#regForm #sexPrefId').val().length == 0){
-			alert('יש למלא שדה העדפה');
-			return false;
-		}
+
+
+		if (!app.container.find('.heightList select').val().length) {
+    		app.alert('גובה שגוי');
+    		return false;
+    	}
+
+    	if (!app.container.find('.bodyTypeList select').val().length) {
+    		app.alert('מבנה גוף שגוי');
+    		return false;
+    	}
+
+    	if (!app.container.find('.eyesColorList select').val().length) {
+    		app.alert('צבע עיניים שגוי');
+    		return false;
+    	}
+
+    	if (!app.container.find('.hairColorList select').val().length) {
+    		app.alert('צבע השער שגוי');
+    		return false;
+    	}
+
+    	if (!app.container.find('.maritalStatusList select').val().length) {
+    		app.alert('מצב משפחתי שגוי');
+    		return false;
+    	}
+
+    	if (!app.container.find('.childrenList select').val().length) {
+            app.alert('מספר ילדים שגוי');
+            return false;
+        }
+
+    	if (!app.container.find('.originList select').val().length) {
+    		app.alert('ארץ לידה שגוי');
+    		return false;
+    	}
+
+    	if (!app.container.find('.occupationList select').val().length) {
+        	app.alert('עיסוק שגוי');
+         	return false;
+        }
+
+    	if (!app.container.find('.smokingList select').val().length) {
+    		app.alert('הרגלי עישון שגויים');
+    		return false;
+    	}
+
+    	if (!app.container.find('.drinkingList select').val().length) {
+    		app.alert('הרגלי שתיה שגויים');
+    		return false;
+    	}
+
+    	if(!app.container.find('.sexPreferenceList select').val().length){
+        	alert('השתייכות מינית שגויה');
+        	return false;
+        }
+
+		if (!app.container.find('.userPartnerKindList select').val().length) {
+        	app.alert('סוג השותפות שגוי');
+        	return false;
+        }
+
+        if (!app.container.find('.portabilityList select').val().length) {
+        	app.alert('נכונות להעתקת מקום מגורים שגויה');
+        	return false;
+        }
+
+        if (!app.container.find('.userPartnerRaisingList select').val().length) {
+        	app.alert('גידול הילד שגוי');
+        	return false;
+        }
+
+        if (!app.container.find('.userPartnerEconomyList select').val().length) {
+        	app.alert('תמיכה כלכלית שגויה');
+        	return false;
+        }
+
+
+
+		if (!app.container.find('.regionsList select').val().length) {
+    		app.alert('איזור שגוי');
+    		return false;
+    	}
+
+    	if(app.container.find('#userCity').val().length == 0){
+    		app.alert('עיר שגויה');
+    		return false;
+    	}
+
+   		if(app.container.find('#aboutMe').val().length < 10){
+   			app.alert('על עצמי שגוי (אמור להיות 10 סימנים לפחות)');
+   			return false;
+   		}
+
+   		if(app.container.find('#lookingFor').val().length < 10){
+   			app.alert('מה אני מחפש/ת שגוי (אמור להיות 10 סימנים לפחות');
+   			return false;
+   		}
+
+   		if(app.container.find('#confirm option:selected').val() != "1"){
+   			app.alert('אנא סמנו בתיבה');
+   			return false;
+   		}
+
+
+   		if(app.container.find('.userFailed').is(":visible")){
+   			app.alert('דוא"ל או כינוי שגוי');
+   			return false;
+   		}
+
+/*
+
 		if($('#regForm #userCity').val().length == 0){
 			alert('יש למלא שדה עיר');
 			return false;
@@ -1257,15 +1509,7 @@ var app = {
 			alert('יש למלא שדה מה אני מחפש');
 			return false;
 		}
-		/*if($('#userPhone').val().length == 0){
-			alert('טלפון שגויה');
-			return false;
-		}*/
-		
-		/*if($('#confirm option:selected').val() != "1"){
-			alert('Please check confirmation box');
-			return false;
-		}*/
+*/
 		return true;
 	},
 	
@@ -1276,41 +1520,150 @@ var app = {
 		app.container.html('');
 		app.container.append('<h1>תוצאות</h1><div class="dots"></div>');
 		app.pageNumber = 1;
+		app.itemsPerPage = 30;
 		app.action = 'getSearchResults';
 		app.getUsers();
 	},
 	
-	getUserProfile: function(userId){		
+	
+	reportAbuse: function(){
+
+		var abuseMessage = $('#abuseMessage').val();
+
+		$.ajax({
+		   url: app.apiUrl+'/api/v4/user/abuse/'+app.reportAbuseUserId,
+		   type: 'Post',
+		   contentType: "application/json; charset=utf-8",
+		   data: JSON.stringify({abuseMessage: abuseMessage}),
+			   error: function(response){
+
+			   //alert(JSON.stringify(response));
+
+			   },
+		   success: function(response, status, xhr){
+			   $('#abuseMessage').val('');
+			   app.alert('תודה. ההודעה נשלחה.');
+			   app.back();
+			}
+		});
+	},
+
+	sendMessageToAdmin: function(){
+
+		app.startLoading();
+
+		var userId = window.localStorage.getItem("userId");
+		var messageToAdmin = $('#messageToAdmin').val();
+
+		if(!messageToAdmin.length){
+			return;
+		}
+
+		$.ajax({
+		   url: app.apiUrl + '/api/v4/contactUs',
+		   type: 'Post',
+		   contentType: "application/json; charset=utf-8",
+		   data: JSON.stringify({
+				userId: userId,
+				messageToAdmin: messageToAdmin,
+		   }),
+			error: function(error){
+			   app.alert(JSON.stringify(error));
+			   app.stopLoading();
+			},
+			success: function(response, status, xhr){
+			   app.stopLoading();
+			   $('#messageToAdmin').val('');
+			   app.alert('תודה. ההודעה נשלחה');
+			   app.back();
+			}
+		});
+	},
+
+	reportAbuse: function(){
+
+		var abuseMessage = $('#abuseMessage').val();
+
+		$.ajax({
+		   url: app.apiUrl+'/api/v4/user/abuse/'+app.reportAbuseUserId,
+		   type: 'Post',
+		   contentType: "application/json; charset=utf-8",
+		   data: JSON.stringify({abuseMessage: abuseMessage}),
+			   error: function(response){
+
+			   //alert(JSON.stringify(response));
+
+			   },
+		   success: function(response, status, xhr){
+			   $('#abuseMessage').val('');
+			   app.alert('תודה. ההודעה נשלחה.');
+			   app.back();
+			}
+		});
+	},
+	
+	
+	getUserProfile: function(userId){
+
+		if(getUsersRequest != ''){
+			getUsersRequest.abort();
+			console.log("Abort getUsersRequest");
+			app.pageNumber--;
+		}
+
 		if(userId==window.localStorage.getItem("userId")){app.getMyProfileData(); return;}
 		app.ajaxSetup();
-		app.startLoading();	
+		app.startLoading();
 		$.ajax({
-			url: 'http://m.gobaby.co.il/api/v1/user/profile/'+userId,
+			url: 'http://m.gobaby.co.il/api/v4/user/profile/'+userId,
 			type: 'Get',
-			success: function(user, status, xhr){				
-				//alert( JSON.stringify(user));
+			success: function(user, status, xhr){
+				console.log( JSON.stringify(user));
+			   app.reportAbuseUserId = userId;
+
+
+
+				$('.my-gallery').html('');
+
 				app.showPage('user_profile_page');
+
+
 				window.scrollTo(0, 0);
 				var detailsContainer = app.container.find('#user_details');
-				var replaceDblQuete = new RegExp("#34;",'g');
-				//alert( JSON.stringify(user));
-				user.nickName = user.nickName.replace(replaceDblQuete,'"');
-				user.city = user.city.replace(replaceDblQuete,'"');
-				user.about = user.about.replace(replaceDblQuete,'"');
-				
 				app.container.find('#pic1, #pic2, #pic3').attr("src","");
+
 				app.container.find(".special3, .blue_star, .on5, .on1, .pic_wrap").hide();
-				app.container.find('.pic_wrap').addClass("left").removeClass("center");
-				app.container.find('#pic1').parent('a').addClass("fancybox");
+				//app.container.find('.pic_wrap').addClass("left").removeClass("center");
+				//app.container.find('#pic1').parent('a').addClass("fancybox");
 				app.container.find("h1 span").text(user.nickName);
-				app.container.find('#pic1').attr("src",user.mainImage).parent('a').attr({"href":user.mainImage, "rel":"images_"+user.userId});				
-				if(user.mainImage == "http://m.shedate.co.il/images/no_photo_female.jpg" 
-				|| user.mainImage == "http://m.shedate.co.il/images/no_photo_male.jpg"){
-					app.container.find('#pic1').parent('a').removeClass("fancybox").attr("href","#");
+
+
+
+  /*
+			   if(user.mainImage.url == "http://m.gobaby.co.il/images/0.jpg"
+				|| user.mainImage.url == "http://m.gobaby.co.il/images/1.jpg"){
+					app.container.find('#pic1').parent('a').attr("href","#");
 				}
-				app.container.find('.pic_wrap').eq(0).show();				
+   */
+			   if(user.mainImage.size.length){
+			       $('.noPicture').hide();
+			       var userPhotoTemplate = $('#userPhotoTemplate').html().replace(/\[ID\]/g,'pic1');
+				   $(userPhotoTemplate).appendTo('.my-gallery');
+                   app.container.find('#pic1').attr("src",user.mainImage.url).parent('a').attr({"href":user.mainImage.url, "data-size": user.mainImage.size});
+			       app.container.find('.pic_wrap').eq(0).show();
+			   }
+			   else{
+     			   $('.noPicture img').attr("src",user.mainImage.url);
+				   $('.noPicture').show();
+			   }
+
+
+
+
+
+			   /*
 				app.container.find('.fancybox').fancybox();
-				if(typeof user.otherImages[0] !== "undefined"){ 
+				if(typeof user.otherImages[0] !== "undefined"){
 					//alert(user.otherImages[0]);
 					app.container
 						.find('.pic_wrap').eq(1).show()
@@ -1325,19 +1678,39 @@ var app = {
 					app.container.find('.pic_wrap').eq(2).show()
 						.find("img").attr("src",user.otherImages[1])
 						.parent('a').attr({"href":user.otherImages[1], "rel":"images_"+user.userId});
-				}				
+				}
+
+				*/
+
+
+			   if(typeof user.otherImages[0] !== "undefined"){
+			       app.proccessUserPhotoHtml(user,1);
+
+			   }else{
+			       app.container.find('.pic_wrap').addClass("center");
+			   }
+
+			   if(typeof user.otherImages[1] !== "undefined"){
+				   app.proccessUserPhotoHtml(user,2);
+			   }
+
+
+			   initPhotoSwipeFromDOM('.my-gallery');
+
+
+
 				if(user.isPaying == 1){
 					app.container.find(".special3").show();
 				}
 				if(user.isNew == 1){
 					app.container.find(".blue_star").show();
-				}				
+				}
 				if(user.isOnline == 1){
-					app.container.find(".on5").show();					
+					app.container.find(".on5").show();
 				}else{
 					app.container.find(".on1").show();
 				}
-				if(user.distance != ""){						
+				if(user.distance != ""){
 					app.container.find(".distance_value").show().css({'right':($('#user_pictures .pic_wrap').width()*0.9-$('#user_pictures .distance_value').width())/2+'px'}).find("span").html(user.distance);
 				}else{
 					app.container.find(".distance_value").hide().find("span").html(user.distance);
@@ -1346,11 +1719,25 @@ var app = {
 				app.profileLineTemplate = $('#userProfileLineTemplate').html();
 				app.profileLineTemplate2 = $('#userProfileLineTemplate2').html();
 				var profileButtonsTemplate = $('#userProfileButtonsTemplate').html();
-				profileButtonsTemplate = profileButtonsTemplate.replace(/\[USERNICK\]/g,user.nickName);									
+				profileButtonsTemplate = profileButtonsTemplate.replace(/\[USERNICK\]/g,user.nickName);
 				profileButtonsTemplate = profileButtonsTemplate.replace("[USER_ID]", user.userId);
 				//profileButtonsTemplate.insertBefore(detailsContainer);
-				var html = profileButtonsTemplate;	
-				
+
+			   if(user.userId != window.localStorage.getItem('userId')){
+			        var profileButtonsTemplate = $('#userProfileButtonsTemplate').html();
+			        var profileButtonsTemplate_2 = $('#userProfileButtonsTemplate_2').html();
+			        profileButtonsTemplate = profileButtonsTemplate.replace(/\[USERNICK\]/g,user.nickName);
+			        profileButtonsTemplate = profileButtonsTemplate.replace("[USER_ID]", user.userId);
+			   }
+			   else{
+			       var profileButtonsTemplate = '';
+			       var profileButtonsTemplate_2 = '';
+			   }
+
+
+
+				var html = profileButtonsTemplate;
+
 				if(!((user.eyesColor== undefined || user.eyesColor=='') && (user.bodyType== undefined || user.bodyType=='') && (user.hairColor== undefined || user.hairColor=='') && (user.hairLength== undefined || user.hairLength=='') && (user.breast== undefined || user.breast=='')))
 					html = html + app.getProfileGroup("מראה חיצוני");
 				if(user.eyesColor!== undefined && user.eyesColor!=='')html = html + app.getProfileLine("צבע עיניים", user.eyesColor);
@@ -1362,42 +1749,77 @@ var app = {
 				//html = html + app.getProfileLine("Nickname", user.nickName);
 				if(user.age!== undefined && user.age!=='')html = html + app.getProfileLine("גיל", user.age);
 				if(user.sexPreference!== undefined && user.sexPreference!=='')html = html + app.getProfileLine("נטיה מינית", user.sexPreference);
-				if(user.experience!== undefined && user.experience!='')html = html + app.getProfileLine("נסיון עם נשים", user.experience);	
+				if(user.experience!== undefined && user.experience!='')html = html + app.getProfileLine("נסיון עם נשים", user.experience);
 				if(user.region!== undefined && user.region!=='')html = html + app.getProfileLine("אזור מגורים", user.region);
 				if(user.city!== undefined && user.city!=='')html = html + app.getProfileLine("עיר", user.city);
 				if(user.smoking!== undefined && user.smoking!=='')html = html + app.getProfileLine("עישון", user.smoking);
 				if(user.education!== undefined && user.education!=='')html = html + app.getProfileLine("השכלה", user.education);
 				if(user.occupation!== undefined && user.occupation!=='')html = html + app.getProfileLine("עיסוק", user.occupation);
-				if(user.portability!== undefined && user.portability!=='')html = html + app.getProfileLine("העתקת מקום מגורים", user.portability);
+				if(user.portability!== undefined && user.portability!=='')html = html + app.getProfileLine("נכונות להעתקת מקום מגורים", user.portability);
 				if(user.income!== undefined && user.income!=='')html = html + app.getProfileLine("הכנסה", user.income);
 				html = html + app.getProfileLine("ילדים", user.children);
 				if(user.maritalStatus!== undefined && user.maritalStatus!=='')html = html + app.getProfileLine("מצב משפחתי", user.maritalStatus);
 				//if(user.economy!== undefined && user.economy!=='')html = html + app.getProfileLine("מצבי הכלכלי", user.economy);
-				if(user.faith!== undefined && user.faith!=='')html = html + app.getProfileLine("דת", user.faith);
-				if(user.faithRelations!== undefined && user.faithRelations!=='')html = html + app.getProfileLine("זיקה לדת", user.faithRelations);
+				if(user.faith!== undefined && user.faith!=='')html = html + app.getProfileLine("זיקה לדת", user.faith);
+				if(user.faithRelations!== undefined && user.faithRelations!=='')html = html + app.getProfileLine("דת", user.faithRelations);
 				if(user.ethnicity!== undefined && user.ethnicity!=='')html = html + app.getProfileLine("מוצא", user.ethnicity);
-				//html = html + app.getProfileLine("Region", user.region);				
+				//html = html + app.getProfileLine("Region", user.region);
 				//html = html + app.getProfileLine("Country", user.country);
 				if(user.about!== undefined && user.about!=='' && user.about!=null){
-					html = html + app.getProfileGroup("מעט עלי");				
+					html = html + app.getProfileGroup("מעט עלי");
 					html = html + app.getProfileLine("", user.about);
 				}
 				if(user.lookingFor!== undefined && user.lookingFor!=='' && user.lookingFor!=null){
-					html = html + app.getProfileGroup("אני מחפשת");				
+					html = html + app.getProfileGroup("אני מחפש/ת");
 					html = html + app.getProfileLine("", user.lookingFor);
 				}
-				//if((user.hobbies!== undefined && user.hobbies!=='')&&(user.music!== undefined && user.music!=='')){				
+				//if((user.hobbies!== undefined && user.hobbies!=='')&&(user.music!== undefined && user.music!=='')){
 				//	html = html + app.getProfileGroup("עוד קצת עלי");
 				//	if(user.hobbies!== undefined && user.hobbies!=='')html = html + app.getProfileLine("תחומי העניין שלי", user.hobbies);
 				//	if(user.music!== undefined && user.music!=='')html = html + app.getProfileLine("המוסיקה שלי", user.music);
 				//}
-				detailsContainer.html(html).trigger('create');
-				
-				app.stopLoading();				
+
+			   html = html + profileButtonsTemplate + profileButtonsTemplate_2;
+
+			   detailsContainer.html(html).trigger('create');
+
+			   app.container.find('.pic_wrap').click(function(){
+			   		document.removeEventListener("backbutton", app.back, false);
+                    document.addEventListener("backbutton", app.closeUserGallery, false);
+               });
+
+
+
+				app.stopLoading();
 			}
 		});
 	},
-	
+
+	closeUserGallery: function(){
+        $('.pswp__button--close').click();
+    },
+
+
+	proccessUserPhotoHtml: function(user,index){
+
+		var userPhotoTemplate = $('#userPhotoTemplate').html().replace(/\[ID\]/g,'pic' + index + 1);
+		$(userPhotoTemplate).appendTo('.my-gallery');
+
+		var imageSize = (user.otherImages[index-1].size.length) ? user.otherImages[index-1].size : '1x1' ;
+
+		console.log("SIZE of " + user.otherImages[index-1].url + ":" + imageSize);
+
+		app.container
+		.find('.pic_wrap')
+		.css({"float": "left"})
+		.eq(index)
+		.show()
+		.find('img')
+		.show()
+		.attr("src",user.otherImages[index-1].url)
+		.parent('a')
+		.attr({"href": user.otherImages[index-1].url, "data-size": imageSize});
+	},
 	
 	getProfileGroup: function(groupName){
 		var group = app.profileGroupTemplate;
@@ -1416,48 +1838,108 @@ var app = {
 		return line;
 	},
 	
-	getMessenger: function(){		
-		app.startLoading();		
+
+	getMessenger: function(){
+
+		if(app.pageNumber == 1){
+			app.startLoading();
+		}
+
+		app.itemsPerPage = 20;
+
+
 		$.ajax({
-			url: 'http://m.gobaby.co.il/api/v1/user/contacts',									
-			success: function(response){
-				//alert(JSON.stringify(response));
-				app.response = response;				
-				//if(pagesTracker.indexOf('messenger_page')!=-1){
-				//	pagesTracker.splice(pagesTracker.length-pagesTracker.indexOf('messenger_page'),pagesTracker.indexOf('messenger_page'));
-				//}
-				app.showPage('messenger_page');
-				app.container = app.currentPageWrapper.find('.chats_wrap');
-				app.container.html('');				
-				app.template = $('#messengerTemplate').html();
-				for(var i in app.response.allChats){
-					var currentTemplate = app.template; 
-					var chat = app.response.allChats[i];
-					currentTemplate = currentTemplate.replace("[IMAGE]",chat.user.mainImage);
-					currentTemplate = currentTemplate.replace(/\[USERNICK\]/g,chat.user.nickName);
-					currentTemplate = currentTemplate.replace("[RECENT_MESSAGE]",chat.recentMessage.text);
-					currentTemplate = currentTemplate.replace("[DATE]", chat.recentMessage.date);					
-					currentTemplate = currentTemplate.replace("[USER_ID]", chat.user.userId);
-					app.container.append(currentTemplate);
-					if(chat.newMessagesCount > 0||chat. user.isPaying == 1){
-						var currentUserNode = app.container.find(":last-child");
-						if(chat.newMessagesCount > 0)currentUserNode.find(".new_mes_count").html(chat.newMessagesCount).show();
-						if(chat.user.isPaying == 1)currentUserNode.find(".special2").show();
-					}
-				}
-				app.stopLoading();
+		   url: 'http://m.gobaby.co.il/api/v4/user/contacts/perPage:' + app.itemsPerPage + '/page:' + app.pageNumber,
+		   error: function(response){
+			   console.log(JSON.stringify(response));
+		   },
+		   success: function(response){
+
+			   //console.log(JSON.stringify(response));
+
+			   app.response = response;
+			   //if(pagesTracker.indexOf('messenger_page')!=-1){
+			   //	pagesTracker.splice(pagesTracker.length-pagesTracker.indexOf('messenger_page'),pagesTracker.indexOf('messenger_page'));
+			   //}
+			   app.showPage('messenger_page');
+
+
+			   app.container = app.currentPageWrapper.find('.chats_wrap');
+			   if(app.pageNumber == 1){
+			   app.container.html('');
+			   }
+
+			   if(app.currentPageId == 'messenger_page'){
+
+				   $('.loadingHTML').remove();
+
+				   app.responseItemsNumber = app.response.chatsNumber;
+
+				   if(app.responseItemsNumber == 0){
+				   app.container.append('<div class="center noResults">אין הודעות</div>')
+				   return;
+				   }
+
+
+				   app.template = $('#messengerTemplate').html();
+				   for(var i in app.response.allChats){
+						var currentTemplate = app.template;
+						var chat = app.response.allChats[i];
+						//console.log("CHAT " + i + ": " + JSON.stringify(chat));
+						currentTemplate = currentTemplate.replace("[IMAGE]",chat.user.mainImage.url);
+						currentTemplate = currentTemplate.replace(/\[USERNICK\]/g,chat.user.nickName);
+						currentTemplate = currentTemplate.replace("[RECENT_MESSAGE]",chat.recentMessage.text);
+						currentTemplate = currentTemplate.replace("[DATE]", chat.recentMessage.date);
+						currentTemplate = currentTemplate.replace("[USER_ID]", chat.user.userId);
+						app.container.append(currentTemplate);
+
+					   if(chat.newMessagesCount > 0 || chat.user.isPaying == 1){
+					       var currentUserNode = app.container.find(":last-child");
+					       if(chat.newMessagesCount > 0)
+					           currentUserNode.find(".new_mes_count").html(chat.newMessagesCount).show();
+
+					       /*
+					       if(chat.user.isPaying == 1)
+					           currentUserNode.find(".special2").show();
+					           */
+				       }
+
+			       }
+
+
+			   //console.log(app.container.html());
+
+
+
+
+				   if(app.responseItemsNumber == app.itemsPerPage){
+					   var loadingHTML = '<div class="loadingHTML mar_top_8">'+$('#loadingBarTemplate').html()+'</div>';
+					   $(loadingHTML).insertAfter(app.container.find('.mail_section:last-child'));
+				   }
+				   //else{alert(app.responseItemsNumber +' '+app.itemsPerPage)}
+
+				   app.setScrollEventHandler(1000, 2000);
+
+
+			   }
+			   else{
+			       app.pageNumber--;
+			   }
+
+			   app.stopLoading();
 			}
 		});
 	},
-	
+
 	getChat: function(chatWith, userNick){
 		if(chatWith===window.localStorage.getItem("userId")){app.getMyProfileData(); return;}
 		app.chatWith = chatWith;
 		app.startLoading();
 		$.ajax({
-			url: 'http://m.gobaby.co.il/api/v1/user/chat/'+app.chatWith,									
+			url: app.apiUrl + '/api/v4/user/chat/'+app.chatWith,									
 			success: function(response){				
 				app.response = response;
+				app.contactCurrentReadMessagesNumber = app.response.contactCurrentReadMessagesNumber;
 				//alert(JSON.stringify(app.response));
 				app.showPage('chat_page');
 				window.scrollTo(0, 0);
@@ -1470,16 +1952,16 @@ var app = {
 				app.subscribtionButtonHandler();
 				app.refreshChat();
 				app.stopLoading();
-			}
+			},
 		});
 	},
-	
+
 	subscribtionButtonHandler: function(){
-		if(app.response.chat.abilityReadingMessages == 0){					
-			app.container.find('.message_in .buySubscr').show().trigger('create');									
+		if(app.response.chat.abilityReadingMessages == 0){
+			app.container.find('.message_in .buySubscr').show().trigger('create');
 		}
 	},
-	
+
 	buildChat: function(){
 		var html = '';
 		var k = 1;
@@ -1488,36 +1970,35 @@ var app = {
 		for(var i in app.response.chat.items){					
 			var currentTemplate = app.template; 
 			var message = app.response.chat.items[i];
-			
+
 			if(app.chatWith == message.from){
-				var messageType = "message_in";				
-			} 
-			else 
-				var messageType = "message_out";
-			
-			if(from == message.from) k--;
-			
-			if(k % 2 == 0){
-				messageFloat = "right";
-				info = "info_right";
-			} 
-			else{
-				messageFloat = "left";
-				info = "info_left";
-			}
-			
+            	message.text = message.text + appendToMessage;
+            	var messageType = "message_in";
+            	var messageFloat = "left";
+            	var messageStatusVisibility = 'hidden';
+            	var messageStatusImage = '';
+            	var info = "info_left";
+            	//var isRead = "";
+            }
+            else {
+            	var messageType = "message_out";
+            	var messageFloat = "right";
+            	var info = "info_right";
+            	var messageStatusVisibility = '';
+            	var messageStatusImage = (message.isRead == 1) ? 'messageRead.jpg' : 'messageSaved.jpg';
+            	//console.log(message.isRead);
+            	//var isRead = (message.isRead == 0) ? "checked" : "double_checked";
+            }
+
 			currentTemplate = currentTemplate.replace("[MESSAGE]", message.text);
-			currentTemplate = currentTemplate.replace("[DATE]", message.date);
-			currentTemplate = currentTemplate.replace("[TIME]", message.time);
-			currentTemplate = currentTemplate.replace("[MESSAGE_TYPE]", messageType);
-			currentTemplate = currentTemplate.replace("[MESSAGE_FLOAT]", messageFloat);
-			currentTemplate = currentTemplate.replace("[INFO]", info);
-			
+            currentTemplate = currentTemplate.replace("[DATE]", message.date);
+            currentTemplate = currentTemplate.replace("[TIME]", message.time);
+            currentTemplate = currentTemplate.replace("[MESSAGE_TYPE]", messageType);
+          	currentTemplate = currentTemplate.replace("[MESSAGE_FLOAT]", messageFloat);
+            currentTemplate = currentTemplate.replace("[MESSAGE_STATUS_VISIBILITY]", messageStatusVisibility);
+            currentTemplate = currentTemplate.replace("[MESSAGE_STATUS_IMAGE]", messageStatusImage);
+            currentTemplate = currentTemplate.replace("[INFO]", info);
 			html = html + currentTemplate;
-			
-			var from = message.from;
-			
-			k++;
 		}
 		
 		return html;
@@ -1528,7 +2009,7 @@ var app = {
 		if(message.length > 0){
 			$('#message').val('');			
 			$.ajax({
-				url: 'http://m.gobaby.co.il/api/v1/user/chat/'+app.chatWith,
+				url: app.apiUrl + '/api/v4/user/chat/'+app.chatWith,
 				type: 'Post',
 				contentType: "application/json; charset=utf-8",
 				data: JSON.stringify({			
@@ -1550,17 +2031,18 @@ var app = {
 	refreshChat: function(){
 		if(app.currentPageId == 'chat_page'){
 			$.ajax({
-				url: 'http://m.gobaby.co.il/api/v1/user/chat/'+app.chatWith+'/refresh',
+				url: app.apiUrl + '/api/v4/user/chat/'+app.chatWith+'/'+app.contactCurrentReadMessagesNumber+'/refresh',
 				type: 'Get',
 				complete: function(response, status, jqXHR){					
 					//app.stopLoading();
 				},
 				success: function(response){
 					if(app.currentPageId == 'chat_page'){						
-						if(response.chat != false){											
+						if(response.chat != false){
+							app.response = response;
+							app.contactCurrentReadMessagesNumber = app.response.contactCurrentReadMessagesNumber;
+							var html = app.buildChat();
 							if(app.currentPageId == 'chat_page'){
-								app.response = response;
-								var html = app.buildChat();
 								app.container.html(html);	
 								app.subscribtionButtonHandler();
 							}
@@ -1576,17 +2058,17 @@ var app = {
 	},
 	
 	checkNewMessages: function(){
-		$.ajax({
-			url: 'http://m.gobaby.co.il/api/v1/user/newMessagesCount',
+		checkNewMessagesRequest = $.ajax({
+			url: app.apiUrl + '/api/v4/user/newMessagesCount',
 			type: 'Get',
 			complete: function(response, status, jqXHR){					
 				//app.stopLoading();
 			},
 			success: function(response){
 				//app.response = response;
-				if(app.currentPageId!='login_page'){
+				if(app.currentPageId!='login_page' && app.currentPageId != 'register_page' && app.currentPageId != 'recovery_page'){
 					$('.appPage .ui-content').css({'padding-top':parseInt($(window).height()*0.02)+'px !important'});
-					if(response.newMessagesCount > 0&&app.currentPageId!='login_page'){
+					if(response.newMessagesCount > 0 && app.currentPageId != 'login_page' && app.currentPageId != 'register_page' && app.currentPageId != 'recovery_page'){
 						var count = response.newMessagesCount;
 						$('.new_mes_count2, #massBox span').html(count);
 						$(".new_mes, #massBox span").show();
@@ -1606,7 +2088,7 @@ var app = {
 	
 	getSubscription: function(){
 		var userId = window.localStorage.getItem("userId");
-		var ref = window.open('http://m.gobaby.co.il/subscription/?userId='+userId+'&app=1', '_blank', 'location=yes');
+		var ref = window.open(app.apiUrl + '/subscription/?userId='+userId+'&app=1', '_blank', 'location=yes');
 	
 		//app.showPage('subscription_page');
 		//$(".subscr_quest").unbind('click');
@@ -1650,13 +2132,13 @@ var app = {
 	},
 	
 	deleteImage: function(){
-		app.requestUrl = 'http://m.gobaby.co.il/api/v1/user/images/delete/' + app.imageId,
+		app.requestUrl = app.apiUrl + '/api/v4/user/images/delete/' + app.imageId,
 		app.requestMethod = 'Post';
 		app.getUserImages();
 	},
 	
 	displayUserImages: function(){
-		app.requestUrl = 'http://m.gobaby.co.il/api/v1/user/images';
+		app.requestUrl = app.apiUrl + '/api/v4/user/images';
 		app.requestMethod = 'Get';
 		app.getUserImages();
 	},
@@ -1747,7 +2229,7 @@ var app = {
         var ft = new FileTransfer();
         ft.upload(
         	imageURI, 
-        	encodeURI("http://m.gobaby.co.il/api/v1/user/image"), 
+        	encodeURI("http://m.gobaby.co.il/api/v4/user/image"), 
         	app.uploadSuccess, 
         	app.uploadFailure,
 	        options
@@ -1774,12 +2256,7 @@ var app = {
 		        'נהל תמונות,ביטול'          // buttonLabels
 		    );
 		}else if(app.response.status.code == 1){
-			navigator.notification.alert(
-				app.response.status.message,  // message
-		        function(){},         // callback
-		        'Notification',            // title
-		        'Ok'                  // buttonName
-		    );			
+			app.alert(app.response.status.message);
 		}
 		
 		if(app.currentPageId == 'delete_images_page'){
@@ -1800,7 +2277,7 @@ var app = {
 		alert("התרחשה שגיאה. נסה שנית בבקשה.");
 	},
 	
-	
+	/*
 	register: function(){		
 		app.showPage('register_page');		
 		$('#birthDate').html(app.getBithDate()).trigger('create');
@@ -1808,6 +2285,129 @@ var app = {
 		//app.getCities();		
 		app.getSexPreference();
 	},
+	*/
+
+	register: function(){
+    	app.showPage('register_page');
+    	$('#birthDate').html(app.getBithDate()).trigger('create');
+
+    	app.getHeight();
+
+
+    	app.getList('bodyType');
+    	app.getList('eyesColor');
+    	app.getList('hairColor');
+    	app.getList('maritalStatus');
+    	app.getList('origin');
+    	app.getList('occupation');
+    	app.getList('smoking');
+    	app.getList('drinking');
+    	app.getList('sexPreference');
+    	app.getList('userPartnerKind');
+    	app.getList('portability');
+    	app.getList('userPartnerRaising');
+    	app.getList('userPartnerEconomy');
+
+    	app.getRegions();
+
+
+    	/*
+    	$('.originList select option[value="363"]').prop('selected', true);
+    	console.log($('.originList select').html());
+    	*/
+
+    },
+
+
+    getList: function(entity, multiple){
+
+    	var entityContainer = [];
+    	entityContainer['bodyType'] = '.bodyTypeList';
+    	entityContainer['eyesColor'] = '.eyesColorList';
+        entityContainer['hairColor'] = '.hairColorList';
+    	entityContainer['maritalStatus'] = '.maritalStatusList';
+    	entityContainer['origin'] = '.originList';
+    	entityContainer['occupation'] = '.occupationList';
+    	entityContainer['smoking'] = '.smokingList';
+        entityContainer['drinking'] = '.drinkingList';
+    	entityContainer['sexPreference'] = '.sexPreferenceList';
+    	entityContainer['userPartnerKind'] = '.userPartnerKindList';
+    	entityContainer['portability'] = '.portabilityList';
+    	entityContainer['userPartnerRaising'] = '.userPartnerRaisingList';
+    	entityContainer['userPartnerEconomy'] = '.userPartnerEconomyList';
+
+
+
+
+
+
+
+
+    	$.ajax({
+    	    url: app.apiUrl + '/api/v4/list/' + entity,
+    	    success: function(list, status, xhr){
+    		   //console.log(JSON.stringify(list));
+    		   	var html = '';
+    		   	if(multiple){
+					html = '<fieldset data-role="controlgroup">';
+					for(var i in list.items){
+					   var item = list.items[i];
+					   html = html + '<input name="' + entity + 'Id" type="checkbox" id="check-sex' + item.itemId  + '" value="' + item.itemId  + '"><label for="check-sex' + item.itemId  + '">' + item.itemName + '</label>';
+					}
+					html = html + '</fieldset>';
+    		   	}
+    		   else{
+    			    html = '<select name="' + entity + 'Id" id="' + entity + 'Id"><option value="">בחרו</option>';
+    			    for(var i in list.items){
+    			    	var item = list.items[i];
+    			    	html = html + '<option value="' + item[0]  + '">' + item[1] + '</option>';
+    			    }
+    			    html = html + '</select>';
+    			}
+    		    app.container.find(entityContainer[entity]).html(html).trigger("create");
+
+    		    if(entity == 'origin'){
+
+    		    	/*
+    		    	$('.originList select option[value="363"]').prop('selected', true);
+					$('.originList select').trigger("create");
+					*/
+
+    		    	app.container
+    		    		.find(entityContainer[entity])
+    		    		.find('option[value="363"]')
+    		    		.insertBefore(
+    		    			app.container
+                               .find(entityContainer[entity])
+                               .find('option:eq(1)')
+    		    		)
+    		    	;
+    		    }
+			}
+    	});
+    },
+
+	injectCountries: function(html, container){
+		container.html(html);
+		container.trigger('create');
+		container.find("option[value='US']").insertBefore(container.find("option:eq(0)"));
+		container.find("option[value='CA']").insertBefore(container.find("option:eq(1)"));
+		container.find("option[value='AU']").insertBefore(container.find("option:eq(2)"));
+		container.find("option[value='GB']").insertBefore(container.find("option:eq(3)"));
+		container.val(container.find("option:first").val()).selectmenu("refresh");
+	},
+
+
+    getHeight: function(){
+    	var html = '';
+    	html = html + '<select name="userHeight" id="userHeight"><option value="">בחרו</option>';
+    	for (var i = 100; i <= 250; i++) {
+    		html = html + '<option value="' + i + '">' + i + '</option>';
+    	}
+    	html = html + '</select>';
+
+    	app.container.find('.heightList').html(html).trigger("create");
+    },
 	
 	
 	getBithDate: function(){
@@ -1868,7 +2468,14 @@ var app = {
 };
 
 
+
 document.addEventListener("deviceready", app.init, false);
+
+window.addEventListener('load', function() {
+	new FastClick(document.body);
+}, false);
+
+
 
 function showPreview(coords)
 {
@@ -1901,75 +2508,3 @@ $.fn.serializeObject = function()
     return o;
 };
 
-
-
-//======================================================== FASTCLICK
-function FastButton(element, handler) {
-   this.element = element;
-   this.handler = handler;
-   element.addEventListener('touchstart', this, false);
-};
-FastButton.prototype.handleEvent = function(event) {
-   switch (event.type) {
-      case 'touchstart': this.onTouchStart(event); break;
-      case 'touchmove': this.onTouchMove(event); break;
-      case 'touchend': this.onClick(event); break;
-      case 'click': this.onClick(event); break;
-   }
-};
-FastButton.prototype.onTouchStart = function(event) {
-
-event.stopPropagation();
-   this.element.addEventListener('touchend', this, false);
-   document.body.addEventListener('touchmove', this, false);
-   this.startX = event.touches[0].clientX;
-   this.startY = event.touches[0].clientY;
-isMoving = false;
-};
-FastButton.prototype.onTouchMove = function(event) {
-   if(Math.abs(event.touches[0].clientX - this.startX) > 10 || Math.abs(event.touches[0].clientY - this.startY) > 10) {
-      this.reset();
-   }
-};
-FastButton.prototype.onClick = function(event) {
-   this.reset();
-   this.handler(event);
-   if(event.type == 'touchend') {
-      preventGhostClick(this.startX, this.startY);
-   }
-};
-FastButton.prototype.reset = function() {
-   this.element.removeEventListener('touchend', this, false);
-   document.body.removeEventListener('touchmove', this, false);
-};
-function preventGhostClick(x, y) {
-   coordinates.push(x, y);
-   window.setTimeout(gpop, 2500);
-};
-function gpop() {
-   coordinates.splice(0, 2);
-};
-function gonClick(event) {
-   for(var i = 0; i < coordinates.length; i += 2) {
-      var x = coordinates[i];
-      var y = coordinates[i + 1];
-      if(Math.abs(event.clientX - x) < 25 && Math.abs(event.clientY - y) < 25) {
-         event.stopPropagation();
-         event.preventDefault();
-      }
-   }
-};
-document.addEventListener('click', gonClick, true);
-var coordinates = [];
-function initFastButtons() {
-new FastButton(document.getElementById("mainContainer"), goSomewhere);
-};
-function goSomewhere() {
-var theTarget = document.elementFromPoint(this.startX, this.startY);
-if(theTarget.nodeType == 3) theTarget = theTarget.parentNode;
-
-var theEvent = document.createEvent('MouseEvents');
-theEvent.initEvent('click', true, true);
-theTarget.dispatchEvent(theEvent);
-};
-//========================================================
