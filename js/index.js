@@ -6,7 +6,8 @@ var pushNotification;
 getUsersRequest = '';
 checkNewMessagesRequest = '';
 newMessages = '';
-
+refreshChat = '';
+checkBingo = '';
 
 
 var app = { 
@@ -46,35 +47,20 @@ var app = {
 	logged: false,
 	exit: false,
 	newMessagesCount : 0,
+	contactCurrentAllMessagesNumber : 0,
     contactCurrentReadMessagesNumber : 0,
-	
+
+	swiper: null,
+    bingoIsActive: false,
+    bingos: [],
 		
 	init: function(){
 
-
-		//navigator.splashscreen.hide();	
-		//navigator.splashscreen.show();
 		app.ajaxSetup();		
 		app.chooseMainPage();
 		app.pictureSource = navigator.camera.PictureSourceType;
 		app.destinationType = navigator.camera.DestinationType;
 		app.encodingType = navigator.camera.EncodingType;
-		$('#mainContainer').css({'height':$('#mainContainer').css('min-height')+' !important'});
-		//$('input[type="text"], textarea').click(function(){$(this).focus();});
-		window.addEventListener('native.keyboardshow', function (e){
-			app.container.css({'margin-bottom':e.keyboardHeight}).trigger('refresh');
-			//$("html, body").animate({ scrollTop: '+=' + e.keyboardHeight + 'px' }, 600);
-			//alert($('#mainContainer').css({'padding-bottom'}));
-		    //alert('Keyboard height is: ' + e.keyboardHeight);
-		});
-		window.addEventListener('native.keyboardhide', function (e){
-			app.container.css({'margin-bottom':'0px'}).trigger('refresh');
-			//alert($('#mainContainer').css({'margin-bottom'}));
-		    //console.log('Goodnight, sweet prince');
-		});
-		//$('#header').css({'height':$(window).height()*0.12+'px !important'});
-		//$('.appPage').css({'padding-top':parseInt($(window).height()*0.12)+'px !important'});
-		//$('.appPage .ui-content').css({'padding-top':parseInt($(window).height()*0.02)+'px !important'});
 	},
 
 	ajaxSetup: function(){
@@ -135,9 +121,9 @@ var app = {
 
 	logout:function(){
 
+		app.startLoading();
 		$(window).unbind('scroll');
 		clearTimeout(newMessages);
-		app.startLoading();
 
 		pagesTracker = [];
 		pagesTracker.push('login_page');
@@ -160,8 +146,7 @@ var app = {
 			success: function(data, status){	
 				//alert(JSON.stringify(data));
 				if(data.logout == 1){					
-					app.logged = false;	
-					//$('#top_right_buttons').css({'display':'table'});
+					app.logged = false;
 					app.positionSaved = false;
 					window.localStorage.setItem("userId", "");
 					window.localStorage.setItem("user", "");
@@ -179,10 +164,12 @@ var app = {
 		document.removeEventListener("backbutton", app.back, false);
 		
 		if(app.logged === false){
-			var userInput = window.localStorage.getItem("userInput");			 
-			$('#user_input').find('input').val(userInput);
+			var userInput = window.localStorage.getItem("userInput");
+			if(userInput != 'null')
+            	$('#user_input').find('input').val(userInput);
 			$('.appPage').hide();
 			$('.new_mes').hide();
+			$('#likesNotifications').hide();
 			$("#login_page").show();  
 			$('#back').hide();
 			$('#logout').hide();
@@ -198,6 +185,7 @@ var app = {
 			$('#back').hide();
 			$('#logout').show();
 			$('#sign_up').hide();
+            $('#likesNotifications').css({left:'auto',right:'0px'}).show();
 			//$('#contact').show();								 
 			app.currentPageId = 'main_page';
 			app.currentPageWrapper = $('#'+app.currentPageId);
@@ -208,7 +196,8 @@ var app = {
 	loggedUserInit: function(){
 		app.searchFuncsMainCall = true;		
 		app.setBannerDestination();
-		app.checkNewMessages();					
+		app.checkNewMessages();
+		app.checkBingo();
 		//app.pushNotificationInit();
 		app.sendUserPosition();
 	},
@@ -246,7 +235,7 @@ var app = {
 					app.UIHandler();
 					app.loggedUserInit();
 					$(window).unbind("scroll");
-					window.scrollTo(0, 0);
+					//window.scrollTo(0, 0);
 				}		
 			}
 		});		
@@ -295,7 +284,7 @@ var app = {
 		user = unescape(encodeURIComponent(userInput));
 		pass = unescape(encodeURIComponent(pass));
 		window.localStorage.setItem("user",user);
-		window.localStorage.setItem("pass",pass);	
+		window.localStorage.setItem("pass",pass);
 		
 		$.ajax({				
 			url: app.apiUrl + '/api/v4/user/login',			
@@ -312,7 +301,8 @@ var app = {
 					$('#logout').show();
 					window.localStorage.setItem("userId", data.userId);	
 					window.localStorage.setItem("userInput", userInput);
-					app.loggedUserInit();					
+					app.loggedUserInit();
+					window.scrollTo(0, 0);
 				}
 			}
 		});
@@ -337,7 +327,7 @@ var app = {
 			
 		console.log(JSON.stringify(data));
 		//return;
-		
+		//alert(JSON.stringify(data));
 		$.ajax({
 			url: app.apiUrl + '/api/v4/user/location',
 			type: 'Post',
@@ -350,6 +340,7 @@ var app = {
 	},
 	
 	userPositionError: function(error){
+		//alert(JSON.stringify(error));
 		console.log("PERSIST ERROR");
 		console.log('code: '    + error.code    + '\n' +
 	          'message: ' + error.message + '\n');		
@@ -545,21 +536,31 @@ var app = {
 		if(app.currentPageId == 'main_page'){
 			$('#back').hide();
 			$('#sign_up').hide();
-			//$('#contact').show();		
+			//$('#contact').show();
+			$('#likesNotifications').css({left:'auto',right:'0px'}).show();
+            $('#logout').show();
 		}
 		else if(app.currentPageId == 'login_page'){
 			//$('#top_right_buttons').css({'display':'table'});			
 			$('#back').hide();
 			$('#sign_up').show();
-			//$('#contact').hide(); 
+			//$('#contact').hide();
+			$('#logout').hide();
+            $('#likesNotifications').hide();
 		}		
 		else{
 			//$('#top_right_buttons').css({'display':'block'});
 			$('#back').show();
 			$('#sign_up').hide();
-			//$('#contact').hide();  
+			//$('#contact').hide();
+			$('#logout').hide();
+			$('#likesNotifications').removeAttr('style').show();
 			document.addEventListener("backbutton", app.back, false);
 		}
+
+		if(app.currentPageId == 'register_page' || app.currentPageId == 'recovery_page'){
+        	$('#likesNotifications').hide();
+        }
 		//if(trigger){
 			$('#header').trigger('refresh');
 		//}
@@ -568,7 +569,7 @@ var app = {
 	},
 	
 	sortByDistance: function(){
-		app.sort = 'distance';		
+		app.sort = 'distance';
 		$('#sortByDistance').hide();
 		$('#sortByEntranceTime').show();
 		app.chooseSearchFunction();		
@@ -611,7 +612,6 @@ var app = {
  
 	getUsers: function(){
 
-
 		if(app.pageNumber == 1){
         	app.startLoading();
         }
@@ -638,8 +638,9 @@ var app = {
 				if(sexPref!='')sexPref+=',';
 				sexPref+=$(this).val();
 			});			
-			
-			app.requestUrl = app.apiUrl + '/api/v4/users/search/region:'+region+'/age:'+ageFrom+'-'+ageTo+'/userGender:'+userGender+'/nickName:'+nickName+'/count:'+app.itemsPerPage+'/page:'+app.pageNumber+'/sexPreference:'+sexPref+'/sort:'+app.sort;;
+
+			app.requestUrl = app.apiUrl + '/api/v4/users/search/region:'+region+'/age:'+ageFrom+'-'+ageTo+'/userGender:'+userGender+'/nickName:'+nickName+'/count:'+app.itemsPerPage+'/page:'+app.pageNumber+'/sexPreference:'+sexPref+'/sort:'+app.sort;
+
 		}	
 		else if(app.action == 'getStatResults'){					
 			app.requestUrl = app.apiUrl + '/api/v4/user/statistics/'+app.statAction+'/count:'+app.itemsPerPage+'/page:'+app.pageNumber+'/sort:'+app.sort;
@@ -650,7 +651,6 @@ var app = {
 			timeout:10000,
 			success: function(response, status){
 				//app.stopLoading();
-				
 				app.response = response;
 				//alert(app.response.users.itemsNumber,app.pageNumber);
 				//alert(JSON.stringify(app.response));	
@@ -659,10 +659,10 @@ var app = {
 				}else{
 					app.displayUsers();
 				}
-			},
-			//error:function(err){
-			//	alert(JSON.stringify(err));	
-			//}
+			}/*,
+			error:function(err){
+				alert(JSON.stringify(err));
+			}*/
 		});
 	},	
 	
@@ -690,7 +690,8 @@ var app = {
 			for(var i in app.response.users.items){
 				var currentTemplate = app.template;
 				var user = app.response.users.items[i];
-				//alert( user.city );
+				if(user.city == null)
+					user.city = '';
 				currentTemplate = currentTemplate.replace("[USERNICK]",user.nickName);
 				currentTemplate = currentTemplate.replace("[AGE]",user.age);
 				//currentTemplate = currentTemplate.replace("[COUNTRY]",user.country+',');
@@ -698,21 +699,9 @@ var app = {
 				currentTemplate = currentTemplate.replace("[IMAGE]",user.mainImage.url);
 				currentTemplate = currentTemplate.replace(/\[USERNICK\]/g,user.nickName);
 				currentTemplate = currentTemplate.replace("[USER_ID]", user.id);
-				//var aboutUser = '';
-				//if(typeof(user.about) === 'string'){
-				//	if(user.about.length > 90){
-				//		aboutUser = user.about.substring(0,90)+'...';
-				//	}
-				//	else{
-				//		aboutUser = user.about;
-				//	}
-				//}
-
-
 
 				if(user.about == null || user.about.indexOf(" ") > 20)
                 	user.about='';
-
 
                 if(user.about == null)
                 	user.about='';
@@ -739,6 +728,7 @@ var app = {
 				}
 				if(user.distance != ""){
 					currentUserNode.find(".distance_value").show().find("span").html(user.distance);
+					app.positionSaved = true;
 				}
 			}
 			//setTimeout(app.stopLoading(), 10000);
@@ -891,11 +881,13 @@ var app = {
         		if(!response.err)
         			app.currentPageWrapper.find('#user').val('');
         		alert(response.text);
+        		app.chooseMainPage();
         	},
         	error: function(err){
         		//alert(JSON.stringify(err));
         		app.currentPageWrapper.find('#user').val('');
 				alert('סיסמה נשלחה לכתובת המייל שהזנת');
+				app.chooseMainPage();
 			}
         });
 	},
@@ -907,44 +899,46 @@ var app = {
 		   console.log(JSON.stringify(response));
 		   },
 		   success: function(response){
-		   user = response.user;
-		   //alert(JSON.stringify(response));
-		   app.showPage('edit_profile_page');
-		   app.container = app.currentPageWrapper.find('.edit_wrap');
-		   app.container.html('');
-		   app.template = $('#userEditProfileTemplate').html();
-		   app.template = app.template.replace(/\[userNick\]/g,user.userNick);
-		   app.template = app.template.replace(/\[userPass\]/g,user.userPass);
-		   app.template = app.template.replace(/\[userEmail\]/g,user.userEmail);
-		   app.template = app.template.replace(/\[userCity\]/g,user.userCity);
 
-		   if(user.userAboutMe == null)
-					user.userAboutMe='';
+			   user = response.user;
+			   app.response = user;
+			   //alert(JSON.stringify(response));
+			   app.showPage('edit_profile_page');
+			   app.container = app.currentPageWrapper.find('.edit_wrap');
+			   app.container.html('');
+			   app.template = $('#userEditProfileTemplate').html();
+			   app.template = app.template.replace(/\[userNick\]/g,user.userNick);
+			   app.template = app.template.replace(/\[userPass\]/g,user.userPass);
+			   app.template = app.template.replace(/\[userEmail\]/g,user.userEmail);
+			   app.template = app.template.replace(/\[userCity\]/g,user.userCity);
 
-		   if(user.userLookingFor == null)
-					user.userLookingFor='';
+			   if(user.userAboutMe == null)
+						user.userAboutMe='';
 
-		   app.template = app.template.replace(/\[userAboutMe\]/g,user.userAboutMe);
-		   app.template = app.template.replace(/\[userLookingFor\]/g,user.userLookingFor);
-		   //app.template = app.template.replace(/\[userfName\]/g,user.userfName);
-		   //app.template = app.template.replace(/\[userlName\]/g,user.userlName);
-		   app.template = app.template.replace(/\[Y\]/g,user.Y);
-		   app.template = app.template.replace(/\[n\]/g,user.n);
-		   app.template = app.template.replace(/\[j\]/g,user.j);
+			   if(user.userLookingFor == null)
+						user.userLookingFor='';
 
-
-		   app.container.html(app.template).trigger('create');
-		   app.getRegions();
-		   $('#userBirth').html(app.getBithDate()).trigger('create');
+			   app.template = app.template.replace(/\[userAboutMe\]/g,user.userAboutMe);
+			   app.template = app.template.replace(/\[userLookingFor\]/g,user.userLookingFor);
+			   //app.template = app.template.replace(/\[userfName\]/g,user.userfName);
+			   //app.template = app.template.replace(/\[userlName\]/g,user.userlName);
+			   app.template = app.template.replace(/\[Y\]/g,user.Y);
+			   app.template = app.template.replace(/\[n\]/g,user.n);
+			   app.template = app.template.replace(/\[j\]/g,user.j);
 
 
+			   app.container.html(app.template).trigger('create');
+			   app.getRegions();
+			   $('#userBirth').html(app.getBithDate()).trigger('create');
 
-		   //app.container.find('.userGender').html(app.getuserGender()).trigger('create');
+
+
+			   //app.container.find('.userGender').html(app.getuserGender()).trigger('create');
 		   },
 		   error: function(err){
 		   //alert(JSON.stringify(err));
 		   }
-		   });
+		});
 	},
 
 	saveProf: function (el,tag){
@@ -1041,70 +1035,69 @@ var app = {
 
 
 		$.ajax({
-			   url: 'http://m.gobaby.co.il/api/v4/user/data',
-			   //dataType: 'json',
-			   type: 'post',
-			   data: JSON.stringify({name:name,val:val}),
-			   contentType: "application/json; charset=utf-8",
-			   success : function(res){
+		   	url: 'http://m.gobaby.co.il/api/v4/user/data',
+		   	//dataType: 'json',
+		   	type: 'post',
+		   	data: JSON.stringify({name:name,val:val}),
+		   	contentType: "application/json; charset=utf-8",
+		   	success : function(res){
 
+		   		if(res.err != '1'){
+			   		console.log(JSON.stringify(res));
 
-			   if(res.err != '1'){
-				   console.log(JSON.stringify(res));
+			   		console.log("Abort checkNewMessagesRequest");
+			   		checkNewMessagesRequest.abort();
+			   		clearTimeout(newMessages);
 
-				   console.log("Abort checkNewMessagesRequest");
-				   checkNewMessagesRequest.abort();
-				   clearTimeout(newMessages);
+			   		var userInput = app.container.find("#userNick").val();
+			   		var pass = app.container.find("#editedUserPass").val();
+			   		console.log("USERNAME: " + user);
+			   		console.log("PASSWORD: " + pass);
+			   		user = unescape(encodeURIComponent(userInput));
+			   		pass = unescape(encodeURIComponent(pass));
+			   		window.localStorage.setItem("user",user);
+			   		window.localStorage.setItem("pass",pass);
+			   		window.localStorage.setItem("userInput", userInput);
+		   		}
 
-				   var user = app.container.find("#userNick").val();
-				   var pass = app.container.find("#editedUserPass").val();
-				   console.log("USERNAME: " + user);
-				   console.log("PASSWORD: " + pass);
-				   user = unescape(encodeURIComponent(user));
-				   pass = unescape(encodeURIComponent(pass));
-				   window.localStorage.setItem("user",user);
-				   window.localStorage.setItem("pass",pass);
-			   }
+		   		//console.log("_________________________________________----------");
 
-			   //console.log("_________________________________________----------");
+		   		app.ajaxSetup();
+		   		app.checkNewMessages();
 
+		   		app.stopLoading();
+		   		//alert(JSON.stringify(res)); return false;
 
-			   app.ajaxSetup();
-			   app.checkNewMessages();
+		   		if(res.err == '1'){
+			   		//check(input.attr('id'),val);
+			   		alert(res.text);
+			   		$(el).parent().find('.input').css({'background':'red'});
+		   		}else if(res.res == '1'){
+			   		//alert(val);
+			   		alert('עדכון נשמר');
+					if(tag=='select'&&name!='userBirthday0'){
+			   			val = $(el).parent().find('.ui-select span').eq(1).text();
+			   			//alert(val);
+			   		}
+			   		//if(val=='0'&&name=='userGender')val = 'אישה';
+			   		//if(val=='1'&&name=='userGender')val = 'גבר';
 
-			   app.stopLoading();
-			   //alert(JSON.stringify(res)); return false;
-
-			   if(res.err == '1'){
-			   //check(input.attr('id'),val);
-			   alert(res.text);
-			   $(el).parent().find('.input').css({'background':'red'});
-			   }else if(res.res == '1'){
-			   //alert(val);
-			   alert('עדכון נשמר');
-			   if(tag=='select'&&name!='userBirthday0'){
-			   val = $(el).parent().find('.ui-select span').eq(1).text();
-			   //alert(val);
-			   }
-			   //if(val=='0'&&name=='userGender')val = 'אישה';
-			   //if(val=='1'&&name=='userGender')val = 'גבר';
-
-			   if(name=='userBirthday0') val=val.replace(/-/g,' / ');
-			   if(name=='userPass')
-			   $(el).parent().next().find('input').val(val);
-			   else
-			   $(el).parent().next().find('div').text(val);
-			   $('.save').hide();
-			   $('.edit').show();
-			   }
-			   },
-			   error: function(err){
-			   app.stopLoading();
-			   alert(JSON.stringify(err));
-			   $('.save').hide();
-			   $('.edit').show();
-			   }
-			   });
+			   		if(name=='userBirthday0') val=val.replace(/-/g,' / ');
+			   		if(name=='userPass')
+			   			$(el).parent().next().find('input').val(val);
+			   		else
+			   			$(el).parent().next().find('div').text(val);
+			   		$('.save').hide();
+			   		$('.edit').show();
+				}
+			},
+			error: function(err){
+		   		app.stopLoading();
+				alert(JSON.stringify(err));
+				$('.save').hide();
+				$('.edit').show();
+			}
+		});
 	},
 
 	editProf: function (el){
@@ -1172,9 +1165,7 @@ var app = {
 					$(".sexPreferenceList fieldset").html(html);
 					$(".sexPreferenceList").trigger("create");					
 				}
-				
 			}
-		
 		});
 	},
 	
@@ -1202,7 +1193,7 @@ var app = {
 						html = html + '<option value="' + item.itemId + '"';
 						if(app.currentPageId == 'edit_profile_page'&&item.itemId==app.response.countryRegionId){
 							html = html + ' selected="selected" ';
-							app.container.find(".regionsList").parent().next().children('div').text(item.itemName);
+							app.container.find(".regionsList").parent().next().find('div').text(item.itemName);
 						}
 						html = html + '>' + item.itemName + '</option>';
 					}
@@ -1279,7 +1270,8 @@ var app = {
 	},
 	
 	checkUserFields: function(name,val){
-		if(val.length>2){
+		//val = unescape(encodeURIComponent(val));
+		if(val.length > 2){
 			$.ajax({
 				url: app.apiUrl + '/api/v4/chekUserFields/'+name+'='+val,
 				type:'Get',
@@ -1307,21 +1299,26 @@ var app = {
 			var data = JSON.stringify(
 				$('#regForm').serializeObject()
 			);
+			//alert( JSON.stringify(data));
 			$.ajax({
 				url: app.apiUrl + '/api/v4/user',
 				type: 'Post',
 				data: data,
 				success: function(response){
 					app.response = response;
+
 					//alert( JSON.stringify(app.response));
 					app.stopLoading();
 					if(app.response.result > 0){
-						var user = app.container.find("#userEmail").val(); 
-						var pass = app.container.find("#userPass").val();						
+						var userInput = app.container.find("#userEmail").val();
+						var pass = app.container.find("#userPass").val();
+						user = unescape(encodeURIComponent(userInput));
+                        pass = unescape(encodeURIComponent(pass));
 						window.localStorage.setItem("user",user);
 						window.localStorage.setItem("pass",pass);
+						window.localStorage.setItem("userInput", userInput);
 						window.localStorage.setItem("userId", app.response.result);
-						app.ajaxSetup(); 						
+						app.ajaxSetup();
 						app.getRegStep();
 					}
 					else{
@@ -1416,12 +1413,12 @@ var app = {
             app.alert('מספר ילדים שגוי');
             return false;
         }
-
+		/*
     	if (!app.container.find('.originList select').val().length) {
     		app.alert('ארץ לידה שגוי');
     		return false;
     	}
-
+		*/
     	if (!app.container.find('.occupationList select').val().length) {
         	app.alert('עיסוק שגוי');
          	return false;
@@ -1619,14 +1616,11 @@ var app = {
 			type: 'Get',
 			success: function(user, status, xhr){
 				console.log( JSON.stringify(user));
-			   app.reportAbuseUserId = userId;
-
-
+			   	app.reportAbuseUserId = userId;
 
 				$('.my-gallery').html('');
 
 				app.showPage('user_profile_page');
-
 
 				window.scrollTo(0, 0);
 				var detailsContainer = app.container.find('#user_details');
@@ -1636,9 +1630,6 @@ var app = {
 				//app.container.find('.pic_wrap').addClass("left").removeClass("center");
 				//app.container.find('#pic1').parent('a').addClass("fancybox");
 				app.container.find("h1 span").text(user.nickName);
-
-
-
   /*
 			   if(user.mainImage.url == "http://m.gobaby.co.il/images/0.jpg"
 				|| user.mainImage.url == "http://m.gobaby.co.il/images/1.jpg"){
@@ -1656,11 +1647,6 @@ var app = {
      			   $('.noPicture img').attr("src",user.mainImage.url);
 				   $('.noPicture').show();
 			   }
-
-
-
-
-
 			   /*
 				app.container.find('.fancybox').fancybox();
 				if(typeof user.otherImages[0] !== "undefined"){
@@ -1681,23 +1667,18 @@ var app = {
 				}
 
 				*/
+			   	if(typeof user.otherImages[0] !== "undefined"){
+			       	app.proccessUserPhotoHtml(user,1);
 
+			   	}else{
+			       	app.container.find('.pic_wrap').addClass("center");
+			   	}
 
-			   if(typeof user.otherImages[0] !== "undefined"){
-			       app.proccessUserPhotoHtml(user,1);
+			   	if(typeof user.otherImages[1] !== "undefined"){
+				   	app.proccessUserPhotoHtml(user,2);
+			   	}
 
-			   }else{
-			       app.container.find('.pic_wrap').addClass("center");
-			   }
-
-			   if(typeof user.otherImages[1] !== "undefined"){
-				   app.proccessUserPhotoHtml(user,2);
-			   }
-
-
-			   initPhotoSwipeFromDOM('.my-gallery');
-
-
+			   	initPhotoSwipeFromDOM('.my-gallery');
 
 				if(user.isPaying == 1){
 					app.container.find(".special3").show();
@@ -1723,23 +1704,22 @@ var app = {
 				profileButtonsTemplate = profileButtonsTemplate.replace("[USER_ID]", user.userId);
 				//profileButtonsTemplate.insertBefore(detailsContainer);
 
-			   if(user.userId != window.localStorage.getItem('userId')){
+			   	if(user.userId != window.localStorage.getItem('userId')){
 			        var profileButtonsTemplate = $('#userProfileButtonsTemplate').html();
 			        var profileButtonsTemplate_2 = $('#userProfileButtonsTemplate_2').html();
 			        profileButtonsTemplate = profileButtonsTemplate.replace(/\[USERNICK\]/g,user.nickName);
 			        profileButtonsTemplate = profileButtonsTemplate.replace("[USER_ID]", user.userId);
-			   }
-			   else{
-			       var profileButtonsTemplate = '';
-			       var profileButtonsTemplate_2 = '';
-			   }
-
-
+			   	}
+			   	else{
+			       	var profileButtonsTemplate = '';
+			       	var profileButtonsTemplate_2 = '';
+			   	}
 
 				var html = profileButtonsTemplate;
 
-				if(!((user.eyesColor== undefined || user.eyesColor=='') && (user.bodyType== undefined || user.bodyType=='') && (user.hairColor== undefined || user.hairColor=='') && (user.hairLength== undefined || user.hairLength=='') && (user.breast== undefined || user.breast=='')))
+				if(!((user.eyesColor == undefined || user.eyesColor =='') && (user.bodyType == undefined || user.bodyType=='') && (user.hairColor== undefined || user.hairColor=='') && (user.hairLength== undefined || user.hairLength=='') && (user.breast== undefined || user.breast=='')))
 					html = html + app.getProfileGroup("מראה חיצוני");
+				if(user.userHeight !== undefined && user.userHeight !=='' && user.userHeight != null)html = html + app.getProfileLine("גובה", user.userHeight);
 				if(user.eyesColor!== undefined && user.eyesColor!=='')html = html + app.getProfileLine("צבע עיניים", user.eyesColor);
 				if(user.bodyType!== undefined && user.bodyType!=='')html = html + app.getProfileLine("מבנה גוף", user.bodyType);
 				if(user.hairColor!== undefined && user.hairColor!=='')html = html + app.getProfileLine("צבע שיער", user.hairColor);
@@ -1752,7 +1732,8 @@ var app = {
 				if(user.experience!== undefined && user.experience!='')html = html + app.getProfileLine("נסיון עם נשים", user.experience);
 				if(user.region!== undefined && user.region!=='')html = html + app.getProfileLine("אזור מגורים", user.region);
 				if(user.city!== undefined && user.city!=='')html = html + app.getProfileLine("עיר", user.city);
-				if(user.smoking!== undefined && user.smoking!=='')html = html + app.getProfileLine("עישון", user.smoking);
+				if(user.drinking!== undefined && user.drinking!=='')html = html + app.getProfileLine("הרגלי שתיה", user.drinking);
+				if(user.smoking!== undefined && user.smoking!=='')html = html + app.getProfileLine("הרגלי עישון", user.smoking);
 				if(user.education!== undefined && user.education!=='')html = html + app.getProfileLine("השכלה", user.education);
 				if(user.occupation!== undefined && user.occupation!=='')html = html + app.getProfileLine("עיסוק", user.occupation);
 				if(user.portability!== undefined && user.portability!=='')html = html + app.getProfileLine("נכונות להעתקת מקום מגורים", user.portability);
@@ -1763,6 +1744,9 @@ var app = {
 				if(user.faith!== undefined && user.faith!=='')html = html + app.getProfileLine("זיקה לדת", user.faith);
 				if(user.faithRelations!== undefined && user.faithRelations!=='')html = html + app.getProfileLine("דת", user.faithRelations);
 				if(user.ethnicity!== undefined && user.ethnicity!=='')html = html + app.getProfileLine("מוצא", user.ethnicity);
+				if(user.userPartnerKind!== undefined && user.userPartnerKind!=='')html = html + app.getProfileLine("סוג השותפות", user.userPartnerKind);
+				if(user.userPartnerRaising!== undefined && user.userPartnerRaising!=='')html = html + app.getProfileLine("גידול הילד", user.userPartnerRaising);
+				if(user.userPartnerEconomy!== undefined && user.userPartnerEconomy!=='')html = html + app.getProfileLine("תמיכה כלכלית", user.userPartnerEconomy);
 				//html = html + app.getProfileLine("Region", user.region);
 				//html = html + app.getProfileLine("Country", user.country);
 				if(user.about!== undefined && user.about!=='' && user.about!=null){
@@ -1779,21 +1763,20 @@ var app = {
 				//	if(user.music!== undefined && user.music!=='')html = html + app.getProfileLine("המוסיקה שלי", user.music);
 				//}
 
-			   html = html + profileButtonsTemplate + profileButtonsTemplate_2;
+			   	html = html + profileButtonsTemplate + profileButtonsTemplate_2;
 
-			   detailsContainer.html(html).trigger('create');
+			   	detailsContainer.html(html).trigger('create');
 
-			   app.container.find('.pic_wrap').click(function(){
+			   	app.container.find('.pic_wrap').click(function(){
 			   		document.removeEventListener("backbutton", app.back, false);
                     document.addEventListener("backbutton", app.closeUserGallery, false);
-               });
-
-
+               	});
 
 				app.stopLoading();
 			}
 		});
 	},
+
 
 	closeUserGallery: function(){
         $('.pswp__button--close').click();
@@ -1820,12 +1803,14 @@ var app = {
 		.parent('a')
 		.attr({"href": user.otherImages[index-1].url, "data-size": imageSize});
 	},
-	
+
+
 	getProfileGroup: function(groupName){
 		var group = app.profileGroupTemplate;
 		return group.replace("[GROUP_NAME]", groupName);
 	},
-	
+
+
 	getProfileLine: function(lineName, lineValue){
 		if(lineName != ""){
 			var line = app.profileLineTemplate;
@@ -1847,7 +1832,6 @@ var app = {
 
 		app.itemsPerPage = 20;
 
-
 		$.ajax({
 		   url: 'http://m.gobaby.co.il/api/v4/user/contacts/perPage:' + app.itemsPerPage + '/page:' + app.pageNumber,
 		   error: function(response){
@@ -1862,7 +1846,6 @@ var app = {
 			   //	pagesTracker.splice(pagesTracker.length-pagesTracker.indexOf('messenger_page'),pagesTracker.indexOf('messenger_page'));
 			   //}
 			   app.showPage('messenger_page');
-
 
 			   app.container = app.currentPageWrapper.find('.chats_wrap');
 			   if(app.pageNumber == 1){
@@ -1879,7 +1862,6 @@ var app = {
 				   app.container.append('<div class="center noResults">אין הודעות</div>')
 				   return;
 				   }
-
 
 				   app.template = $('#messengerTemplate').html();
 				   for(var i in app.response.allChats){
@@ -1931,6 +1913,7 @@ var app = {
 		});
 	},
 
+
 	getChat: function(chatWith, userNick){
 		if(chatWith===window.localStorage.getItem("userId")){app.getMyProfileData(); return;}
 		app.chatWith = chatWith;
@@ -1956,11 +1939,13 @@ var app = {
 		});
 	},
 
+
 	subscribtionButtonHandler: function(){
 		if(app.response.chat.abilityReadingMessages == 0){
 			app.container.find('.message_in .buySubscr').show().trigger('create');
 		}
 	},
+
 
 	buildChat: function(){
 		var html = '';
@@ -2003,7 +1988,8 @@ var app = {
 		
 		return html;
 	},	
-	
+
+
 	sendMessage: function(){		
 		var message = $('#message').val();		
 		if(message.length > 0){
@@ -2023,7 +2009,6 @@ var app = {
 					app.refreshChat();
 				}
 			});
-		
 		}
 	},
 	
@@ -2056,36 +2041,52 @@ var app = {
 			clearTimeout(refresh);
 		}
 	},
-	
+
+
 	checkNewMessages: function(){
-		checkNewMessagesRequest = $.ajax({
-			url: app.apiUrl + '/api/v4/user/newMessagesCount',
-			type: 'Get',
-			complete: function(response, status, jqXHR){					
-				//app.stopLoading();
-			},
-			success: function(response){
-				//app.response = response;
-				if(app.currentPageId!='login_page' && app.currentPageId != 'register_page' && app.currentPageId != 'recovery_page'){
-					$('.appPage .ui-content').css({'padding-top':parseInt($(window).height()*0.02)+'px !important'});
-					if(response.newMessagesCount > 0 && app.currentPageId != 'login_page' && app.currentPageId != 'register_page' && app.currentPageId != 'recovery_page'){
+		var user = window.localStorage.getItem("user");
+		var pass = window.localStorage.getItem("pass");
+
+        if(user != '' && pass != '' && app.currentPageId != 'login_page' && app.currentPageId != 'register_page' && app.currentPageId != 'recovery_page'){
+
+			checkNewMessagesRequest = $.ajax({
+				url: app.apiUrl + '/api/v4/user/newMessagesCount',
+				type: 'Get',
+				complete: function(response, status, jqXHR){
+					//app.stopLoading();
+				},
+				success: function(response){
+					//app.response = response;
+					//$('.appPage .ui-content').css({'padding-top':parseInt($(window).height()*0.02)+'px !important'});
+					if(response.newMessagesCount > 0){
 						var count = response.newMessagesCount;
 						$('.new_mes_count2, #massBox span').html(count);
 						$(".new_mes, #massBox span").show();
 						$('#main_page .content_wrap').css({'margin-top':'0'});
 					}
 					else{
-						$('.new_mes, #massBox span').hide();					
+						$('.new_mes, #massBox span').hide();
 						$('#main_page .content_wrap').css({'margin-top':'0 !important'});
 					}
+					if(response.newNotificationsCount > 0){
+                    	app.newNotificationsCount = response.newNotificationsCount;
+                    	if(app.currentPageId != 'login_page' && app.currentPageId != 'register_page' && app.currentPageId != 'recovery_page'){
+                        	$('#likesCount').html(app.newNotificationsCount).show();
+                    	}
+                    }
+                    else{
+                    	app.newNotificationsCount = 0;
+                        $('#likesCount').hide();
+                        //$('#likesCount').html(app.newNotificationsCount).show();
+                    }
 					$('#header').trigger('refresh');
 					newMesssages = setTimeout(app.checkNewMessages, 10000);
 				}
-			}
-		});
-		
+			});
+		}
 	},
-	
+
+
 	getSubscription: function(){
 		var userId = window.localStorage.getItem("userId");
 		var ref = window.open(app.apiUrl + '/subscription/?userId='+userId+'&app=1', '_blank', 'location=yes');
@@ -2114,7 +2115,8 @@ var app = {
 		//	},100);
 		//});
 	},
-	
+
+
 	confirmDeleteImage: function(imageId){
 		app.imageId = imageId;		
 		navigator.notification.confirm(
@@ -2122,27 +2124,31 @@ var app = {
 		        app.deleteImageChoice,              // callback to invoke with index of button pressed		       
 		        'Confirmation',            // title
 		        'Confirm,Cancel'          // buttonLabels
-		 );
+		);
 	},
-	
+
+
 	deleteImageChoice: function(buttonPressedIndex){
 		if(buttonPressedIndex == 1){
 			app.deleteImage();
 		}
 	},
-	
+
+
 	deleteImage: function(){
 		app.requestUrl = app.apiUrl + '/api/v4/user/images/delete/' + app.imageId,
 		app.requestMethod = 'Post';
 		app.getUserImages();
 	},
-	
+
+
 	displayUserImages: function(){
 		app.requestUrl = app.apiUrl + '/api/v4/user/images';
 		app.requestMethod = 'Get';
 		app.getUserImages();
 	},
-	
+
+
 	getUserImages: function(){
 		$('.imagesButtonsWrap').hide();
 		$.ajax({
@@ -2180,7 +2186,8 @@ var app = {
 			}
 		});
 	},
-	
+
+
 	capturePhoto: function(sourceType, destinationType){
 		// Take picture using device camera and retrieve image as base64-encoded string	
 		var options = {
@@ -2198,7 +2205,8 @@ var app = {
 		navigator.camera.getPicture(app.onPhotoDataSuccess, app.onPhotoDataFail, options);
 		
 	},
-	
+
+
 	onPhotoDataSuccess: function(imageURI) {		
 		app.startLoading();
 		
@@ -2212,11 +2220,13 @@ var app = {
 		*/
 		app.uploadPhoto(imageURI); 
 	},
-	
+
+
 	onPhotoDataFail: function() {
 		
 	},
-	
+
+
 	uploadPhoto: function(imageURI){
 		var user = window.localStorage.getItem("user");
 		var pass = window.localStorage.getItem("pass");		
@@ -2264,7 +2274,8 @@ var app = {
 		}
 		
 	},
-	
+
+
 	manageImagesChoice: function(buttonPressedIndex){
 		if(buttonPressedIndex == 1){
 			app.displayUserImages();
@@ -2293,12 +2304,11 @@ var app = {
 
     	app.getHeight();
 
-
     	app.getList('bodyType');
     	app.getList('eyesColor');
     	app.getList('hairColor');
     	app.getList('maritalStatus');
-    	app.getList('origin');
+    	//app.getList('origin');
     	app.getList('occupation');
     	app.getList('smoking');
     	app.getList('drinking');
@@ -2309,13 +2319,10 @@ var app = {
     	app.getList('userPartnerEconomy');
 
     	app.getRegions();
-
-
     	/*
     	$('.originList select option[value="363"]').prop('selected', true);
     	console.log($('.originList select').html());
     	*/
-
     },
 
 
@@ -2326,7 +2333,7 @@ var app = {
     	entityContainer['eyesColor'] = '.eyesColorList';
         entityContainer['hairColor'] = '.hairColorList';
     	entityContainer['maritalStatus'] = '.maritalStatusList';
-    	entityContainer['origin'] = '.originList';
+    	//entityContainer['origin'] = '.originList';
     	entityContainer['occupation'] = '.occupationList';
     	entityContainer['smoking'] = '.smokingList';
         entityContainer['drinking'] = '.drinkingList';
@@ -2336,17 +2343,10 @@ var app = {
     	entityContainer['userPartnerRaising'] = '.userPartnerRaisingList';
     	entityContainer['userPartnerEconomy'] = '.userPartnerEconomyList';
 
-
-
-
-
-
-
-
     	$.ajax({
     	    url: app.apiUrl + '/api/v4/list/' + entity,
     	    success: function(list, status, xhr){
-    		   //console.log(JSON.stringify(list));
+    		   	//console.log(JSON.stringify(list));
     		   	var html = '';
     		   	if(multiple){
 					html = '<fieldset data-role="controlgroup">';
@@ -2356,7 +2356,7 @@ var app = {
 					}
 					html = html + '</fieldset>';
     		   	}
-    		   else{
+    		   	else{
     			    html = '<select name="' + entity + 'Id" id="' + entity + 'Id"><option value="">בחרו</option>';
     			    for(var i in list.items){
     			    	var item = list.items[i];
@@ -2367,12 +2367,10 @@ var app = {
     		    app.container.find(entityContainer[entity]).html(html).trigger("create");
 
     		    if(entity == 'origin'){
-
     		    	/*
     		    	$('.originList select option[value="363"]').prop('selected', true);
 					$('.originList select').trigger("create");
 					*/
-
     		    	app.container
     		    		.find(entityContainer[entity])
     		    		.find('option[value="363"]')
@@ -2386,6 +2384,7 @@ var app = {
 			}
     	});
     },
+
 
 	injectCountries: function(html, container){
 		container.html(html);
@@ -2454,7 +2453,325 @@ var app = {
 		//alert(html);
 		return html;
 	},
-	
+
+
+	getUsersForLikes: function(supposedToBeLikedUserId, notifId){
+
+    	app.startLoading();
+
+    	if(!supposedToBeLikedUserId){
+    		supposedToBeLikedUserId = 0;
+    	}
+
+    	if(!notifId){
+           	notifId = 0;
+        }
+
+        var url = app.apiUrl + '/api/v4/users/forLikes/' + supposedToBeLikedUserId + '/' + notifId;
+
+    	$.ajax({
+           	url: url,
+           	type: 'Get',
+           	timeout: 10000,
+           	error: function(error){
+           		//alert("ERROR:" + JSON.stringify(error));
+           	},
+           	success: function(response){
+    			if(response.userHasNoMainImage){
+                	app.alert("כדי להיכנס לזירה של גובייבי יש לעדכן תמונה..");
+            		app.displayUserImages();
+                }
+
+            	//alert("RESP:" + JSON.stringify(response));
+                if(response.users.itemsNumber > 0){
+    				app.showPage('do_likes_page');
+                   	//console.log("NUMBER: " + response.users.itemsNumber);
+                   	//console.log("ITEMS: " + JSON.stringify(response));
+
+    				var wrapper = $('.swiper-wrapper');
+    				var userId = window.localStorage.getItem("userId");
+    				var html = '';
+    				//wrapper.html(html);
+    				//alert(response.users.items.length);
+    				for(var i in response.users.items){
+
+    					if (i < 250){
+
+    						var user = response.users.items[i];
+
+    						//console.log("USER: " + JSON.stringify(user));
+
+    						//html = html + '<div class="swiper-slide">'+i+'</div>';
+
+    						html = html + '<div class="swiper-slide"><div id="' + user.id + '" class="cont" style="background-image: url('
+    							+ response.users.imagesStoragePath
+    							+ '/'
+    							+ user.imageId
+    							+ '.'
+    							+ response.users.imagesExtension
+    							+ ')"><div class="nickname" onclick="app.getUserProfile(' + user.id + ')">' + user.nickName + ', '+ user.age +'</div></div></div>';
+    						//wrapper.append(html);
+    					}
+    					if (i == 250) break;
+    				}
+
+                    wrapper.html('');
+                    wrapper.append(html);
+                    //wrapper.append(html);
+                    //console.log("SWIPER HTML: " + wrapper.html());
+    				app.initSwiper();
+    				app.showPage('do_likes_page');
+                }
+            }
+        });
+    },
+
+
+    initSwiper: function(){
+
+    	if(app.swiper != null){
+    		app.swiper.destroy();
+    	}
+
+    	app.swiper = new Swiper ('.swiper-container', {
+			// Optional parameters
+			direction: 'horizontal',
+			//initialSlide:10,
+			//spaceBetween: 50,
+			loop: true,
+			speed: 100,
+			prevButton: '.unlike.icon'
+
+			// If we need pagination
+			//pagination: '.swiper-pagination',
+
+			// Navigation arrows
+			//nextButton: '.swiper-button-next',
+			//prevButton: '.swiper-button-prev',
+
+			// And if we need scrollbar
+			//scrollbar: '.swiper-scrollbar',
+        });
+
+    },
+
+
+    doLike: function(){
+
+    	var userId = $('.swiper-slide-active .cont').attr("id");
+
+    	$.ajax({
+           	url: app.apiUrl + '/api/v4/user/like/' + userId,
+           	type: 'Post',
+           	error: function(error){
+           		console.log("ERROR: " + JSON.stringify(error));
+           	},
+           	success: function(response){
+           		//console.log("SUCCESS: " + JSON.stringify(response));
+           		app.swiper.slidePrev();
+           		$('#' + userId).parents('.swiper-slide').remove();
+           		app.checkBingo();
+           	}
+        });
+    },
+
+
+    test: function(){
+
+    },
+
+
+    getChatWith: function(){
+    	var chatWith = $('.swiper-slide-active .cont').attr("id");
+    	var userNick = $('.swiper-slide-active .cont .nickname').text();
+    	console.log($('.swiper-container').html());
+    	app.getChat(chatWith, userNick);
+    },
+
+
+    getLikesNotifications: function(){
+
+    	app.startLoading();
+
+    	$.ajax({
+           	url: app.apiUrl + '/api/v4/user/likes/notifications',
+           	type: 'Get',
+           	error: function(error){
+           		console.log("ERROR: " + JSON.stringify(error));
+           	},
+           	success: function(response){
+           		//console.log("SUCCESS: " + JSON.stringify(response));
+           		app.showPage('likes_notifications_page');
+
+           		if(response.likesNotifications.itemsNumber > 0){
+           		    var template = $('#likeNotificationTemplate').html();
+           		  	var html = '';
+
+           		    for(var i in response.likesNotifications.items){
+           		    	var currentTemplate = template;
+    					var notification = response.likesNotifications.items[i];
+
+    					notification.nickName = notification.nickName.replace(/'/g, "׳");
+
+    					imageUrl = response.likesNotifications.imagesStoragePath
+    						+ '/'
+                            + notification.imageId
+                            + '.'
+                            + response.likesNotifications.imagesExtension
+                        ;
+
+                        var isReadClass = (notification.isRead == 1) ? 'isRead' : '';
+                        var bingoClass = (notification.bingo == 1) ? 'bingo' : '';
+                        var func = (notification.bingo == 1)
+                           	? "app.setUserNotificationAsRead(" + notification.id + ", this);app.getChat('" +  notification.userId  + "','" + notification.nickName + "');"
+                           	: "app.getUsersForLikes('" + notification.userId  + "','" + notification.id  + "')"
+                        ;
+
+    					currentTemplate = currentTemplate.replace("[IMAGE]", imageUrl);
+                        currentTemplate = currentTemplate.replace(/\[USERNICK\]/g,notification.nickName);
+                        currentTemplate = currentTemplate.replace("[FUNCTION]", func);
+                        currentTemplate = currentTemplate.replace("[TEXT]",notification.template.replace("[USERNICK]", notification.nickName));
+                        currentTemplate = currentTemplate.replace("[DATE]", notification.date);
+                        currentTemplate = currentTemplate.replace("[USER_ID]", notification.userId);
+                        currentTemplate = currentTemplate.replace("[IS_READ_CLASS]", isReadClass);
+                        currentTemplate = currentTemplate.replace("[BINGO_CLASS]", bingoClass);
+
+    					html = html + currentTemplate;
+    				}
+
+    				console.log("HTML: " + html);
+
+    				app.currentPageWrapper.find('.notifications_wrap').html(html);
+
+    			}else{
+    				app.currentPageWrapper.find('.notifications_wrap').html('');
+    			}
+            }
+        });
+    },
+
+
+    checkBingo: function(){
+
+    	if(app.currentPageId != 'login_page' && app.currentPageId != 'register_page' && app.currentPageId != 'recovery_page'){
+
+    		if(checkBingo != ''){
+    			checkBingo.abort();
+    		}
+
+    		checkBingo = $.ajax({
+    			url: app.apiUrl + '/api/v4/user/bingo',
+    			type: 'Get',
+    			error: function(error){
+    				console.log("ERROR: " + JSON.stringify(error));
+    				//alert(JSON.stringify(error));
+    			},
+    			success: function(response){
+    				//alert(JSON.stringify(response));
+    				if(app.currentPageId != 'login_page' && app.currentPageId != 'register_page' && app.currentPageId != 'recovery_page'){
+    					console.log("SUCCESS: " + JSON.stringify(response));
+    					if(response.bingo.itemsNumber > 0){
+    						for(var i = 0; i < response.bingo.itemsNumber; i++){
+    							var bingo = response.bingo.items[i];
+
+    							if(!app.inBingosArray(bingo)){
+    								app.bingos.push(bingo);
+    							}
+    						}
+
+    						if(!app.bingoIsActive && app.currentPageId != 'chat_page'){
+    							app.splashBingo(response);
+    						}
+    					}
+    					setTimeout(app.checkBingo, 10000);
+    				}
+    			}
+    		});
+        }
+    },
+
+
+    splashBingo: function(response){
+    	//alert(app.bingos.length);
+    	for(var i in app.bingos){
+    		if(typeof(app.bingos[i]) !== "undefined" ){
+    			//alert("Bingo " + i + ": " + JSON.stringify(app.bingos[i]));
+    			var bingo = app.bingos[i];
+    			var template = $('#bingoTemplate').html();
+
+    			userImageUrlTemplate = response.bingo.imagesStoragePath
+                   	+ '/'
+                    + '[IMAGE_ID]'
+                    + '.'
+                    + response.bingo.imagesExtension
+                ;
+
+                var userImageUrl_1 = userImageUrlTemplate.replace('[IMAGE_ID]', bingo.userImageId_1);
+                var userImageUrl_2 = userImageUrlTemplate.replace('[IMAGE_ID]', bingo.userImageId_2);
+
+    			template = template.replace("[USER_IMAGE_URL_1]", userImageUrl_1);
+    			template = template.replace("[USER_IMAGE_URL_2]", userImageUrl_2);
+    			template = template.replace("[USER_ID]", bingo.userId);
+    			template = template.replace(/\[USERNICK\]/g, bingo.nickName);
+
+    			$('#bingo_page').css({"background":"url('" + userImageUrl_2 + "') no-repeat center center", "background-size":"cover"}).html(template);
+    			app.showPage('bingo_page');
+
+    			app.bingoIsActive = true;
+    			app.setBingoAsSplashed(bingo, i);
+    			break;
+    		}
+        }
+    },
+
+
+    setBingoAsSplashed: function(bingo, i){
+
+    	var data = JSON.stringify(bingo);
+
+    	$.ajax({
+           	url: app.apiUrl + '/api/v4/user/bingo/splashed',
+           	type: 'Post',
+           	data: data,
+           	error: function(error){
+           		console.log("ERROR: " + JSON.stringify(error));
+           	},
+           	success: function(response){
+           		console.log(JSON.stringify(response));
+           		if(response.success){
+           			app.bingos.splice(i, 1);
+           		}
+           	}
+        });
+    },
+
+
+    inBingosArray: function(bingo){
+    	for(var i in app.bingos){
+    		if(app.bingos[i].id === bingo.id){
+    			return true;
+    		}
+    	}
+
+    	return false;
+    },
+
+
+    setUserNotificationAsRead: function(notifId, clickedObj){
+
+    	$.ajax({
+           	url: app.apiUrl + '/api/v4/user/notification/' + notifId + '/read',
+           	type: 'Post',
+           	error: function(error){
+           		console.log("ERROR: " + JSON.stringify(error));
+           	},
+           	success: function(response){
+           		console.log(JSON.stringify(response));
+           		$(clickedObj).addClass("isRead");
+           	}
+        });
+    },
+
 		
 	dump: function(obj) {
 	    var out = '';
