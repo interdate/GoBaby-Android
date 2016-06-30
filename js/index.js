@@ -1620,6 +1620,7 @@ var app = {
         });
     },
 
+    
     addToBlackList: function(userId){
        	$.ajax({
             url: app.apiUrl+'/api/v4/user/blacklist/' + userId,
@@ -1643,6 +1644,7 @@ var app = {
         });
     },
 
+    
     manageLists: function(list, act, userId){
       	app.startLoading();
        	//alert(app.apiUrl+'/api/v4/user/managelists/'+ list + '/' + act + '/' + userId);
@@ -1955,8 +1957,8 @@ var app = {
 						//console.log("CHAT " + i + ": " + JSON.stringify(chat));
 						currentTemplate = currentTemplate.replace("[IMAGE]",chat.user.mainImage.url);
 						currentTemplate = currentTemplate.replace(/\[USERNICK\]/g,chat.user.nickName);
+						
                         var messageText = chat.recentMessage.text
-
 						if(chat.recentMessage.subscibe){
 						    messageText += ' רכישת מנוי';
 						}
@@ -2027,8 +2029,8 @@ var app = {
 				userNick = userNick.replace(/'/g, "׳");
 				app.currentPageWrapper.find('.content_wrap').find("h1 span").text(userNick).attr('onclick','app.getUserProfile(\''+chatWith+'\')');
 				var html = app.buildChat();
-				//alert(html);
 				app.container.html(html).trigger('create');
+
 				app.subscribtionButtonHandler();
 				app.refreshChat();
 				app.stopLoading();
